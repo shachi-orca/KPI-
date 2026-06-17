@@ -3166,7 +3166,14 @@ function adminShift(){
           <input type="number" id="shift-deadline-input" class="form-control" min="1" max="28" value="${state.shiftDeadline||20}" style="width:56px;display:inline-block;text-align:center;padding:2px 4px;font-size:13px;margin:0 2px">日
         </label>
         <button class="btn btn-sm" id="shiftpref-notify" style="font-weight:400"><i class="ti ti-bell"></i> 未提出者に通知</button>
+        <button class="btn btn-sm" id="shiftpref-bulk" style="font-weight:400;background:#1D9E75;color:#fff;border-color:#1D9E75"><i class="ti ti-calendar-check"></i> 希望を一括シフト反映</button>
       </span>
+    </div>
+    <div class="confirm-bar" id="shiftpref-bulk-confirm">
+      <i class="ti ti-alert-triangle" style="color:#D85A30;font-size:16px"></i>
+      <span style="flex:1;font-size:12px;font-weight:500;color:#993C1D">提出済みスタッフのシフト希望を翌月シフトに一括反映します。既存のシフト設定を上書きします。よろしいですか？</span>
+      <button class="btn btn-sm" id="shiftpref-bulk-yes" style="background:#D85A30;color:#fff;border-color:#D85A30">反映する</button>
+      <button class="btn btn-sm" id="shiftpref-bulk-no">中止</button>
     </div>
     <div class="kpi-table-wrap"><table class="att-list" style="min-width:500px">
       <thead><tr><th>担当者</th><th>状態</th><th>提出日</th><th>出勤希望日数</th><th>絶対休み日数</th><th>詳細</th></tr></thead>
@@ -3361,6 +3368,34 @@ function bindAdmin(){
     saveState();
     toast(`${targets.length}名に次回ログイン時のリマインドを設定しました（${targets.map(i=>STAFF_LIST[i]).join('、')}）`,'info');
   };
+  // --- シフト希望：一括シフト反映 ---
+  const bulkBtn=document.getElementById('shiftpref-bulk');
+  const bulkConfirm=document.getElementById('shiftpref-bulk-confirm');
+  if(bulkBtn&&bulkConfirm){
+    bulkBtn.onclick=()=>{bulkConfirm.classList.add('show');};
+    document.getElementById('shiftpref-bulk-no').onclick=()=>{bulkConfirm.classList.remove('show');};
+    document.getElementById('shiftpref-bulk-yes').onclick=()=>{
+      const nmk=nextMonthKey();
+      const prefs=(state.shiftPrefs||{})[nmk]||{};
+      let staffCount=0,dayCount=0;
+      STAFF_LIST.forEach((_,si)=>{
+        const pd=prefs[si];
+        if(!pd||!pd.submitted)return;
+        staffCount++;
+        if(!state.shifts[si])state.shifts[si]={};
+        Object.entries(pd.days||{}).forEach(([ds,v])=>{
+          if(v===null){state.shifts[si][ds]='休';dayCount++;}
+          else if(v&&v.start){
+            const code=PREF_SLOTS.find(p=>p.start===v.start)?.code||SHIFT_TYPES.find(t=>t.start===v.start)?.c||'早';
+            state.shifts[si][ds]=code;dayCount++;
+          }
+        });
+      });
+      if(staffCount===0){toast('提出済みのシフト希望がありません','error');bulkConfirm.classList.remove('show');return;}
+      toast(`シフト希望を反映しました（${staffCount}名・${dayCount}日分）`,'success');
+      render();
+    };
+  }
   // --- シフト修正依頼 承認/却下 ---
   document.querySelectorAll('[data-shiftchg-approve]').forEach(b=>{b.onclick=()=>{
     const r=(state.shiftChangeReqs||[])[parseInt(b.dataset.shiftchgApprove)];if(!r)return;

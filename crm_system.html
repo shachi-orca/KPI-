@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CRM — 顧客・案件管理</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<style>
+:root{
+  --accent:#1D6FDB;--accent-hover:#1558b0;
+  --bg:#f0f2f5;--bg-sub:#e8eaed;--card:#fff;--border:#e0e3e8;
+  --text:#1a1a2e;--text-secondary:#5a6172;--text-tertiary:#737373;
+  --radius:8px;--radius-md:10px;--shadow:0 1px 4px rgba(0,0,0,.08);
+  --danger:#D32F2F;--bg-danger:#FEECEC;--text-danger:#A32D2D;
+  --warning:#B45309;--bg-warning:#FEF3C7;--text-warning:#92400E;
+  --bg-success:#DCFCE7;--text-success:#166534;--success:#1D9E75;
+  --font-mono:'SF Mono','Fira Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5;}
+#app{min-height:100vh;}
+.layout{display:grid;grid-template-columns:210px 1fr;grid-template-rows:52px 1fr;min-height:100vh;}
+.topbar{grid-column:1/3;background:var(--card);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:10px;position:sticky;top:0;z-index:100;height:52px;}
+.topbar-title{font-weight:800;font-size:16px;color:var(--accent);margin-right:auto;display:flex;align-items:center;gap:6px;}
+.sidebar{background:var(--card);border-right:1px solid var(--border);padding:10px 8px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;}
+.nav-item{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:var(--radius);cursor:pointer;font-size:13px;color:var(--text-secondary);transition:background .15s;}
+.nav-item:hover{background:var(--bg);}
+.nav-item.active{background:#eff6ff;color:var(--accent);font-weight:600;}
+.nav-item i{font-size:16px;flex-shrink:0;}
+.content{padding:18px;overflow-y:auto;}
+.card{background:var(--card);border-radius:var(--radius-md);padding:16px;box-shadow:var(--shadow);margin-bottom:14px;}
+.section-title{font-weight:700;font-size:14px;margin-bottom:12px;display:flex;align-items:center;gap:6px;}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:var(--radius);border:1px solid var(--border);background:var(--card);cursor:pointer;font-size:13px;font-weight:500;transition:all .15s;}
+.btn:hover{background:var(--bg);}
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent);}
+.btn-primary:hover{background:var(--accent-hover);border-color:var(--accent-hover);}
+.btn-sm{padding:4px 10px;font-size:12px;}
+.btn:disabled{opacity:.45;cursor:default;}
+.form-control{width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;background:var(--card);color:var(--text);outline:none;}
+.form-control:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(29,111,219,.12);}
+textarea.form-control{resize:vertical;}
+.form-label{font-size:12px;color:var(--text-secondary);margin-bottom:4px;font-weight:500;}
+.select{padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;background:var(--card);color:var(--text);cursor:pointer;outline:none;}
+.chip{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;}
+.table-wrap{overflow-x:auto;}
+table.list{width:100%;border-collapse:collapse;font-size:13px;}
+table.list th{background:var(--bg-sub);padding:8px 12px;text-align:left;font-weight:600;font-size:12px;color:var(--text-secondary);border-bottom:1px solid var(--border);}
+table.list td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+table.list tr:hover td{background:#f8faff;}
+.stat-card{background:var(--card);border-radius:var(--radius-md);padding:16px;box-shadow:var(--shadow);text-align:center;}
+.stat-val{font-size:26px;font-weight:800;font-family:var(--font-mono);color:var(--accent);}
+.stat-label{font-size:12px;color:var(--text-secondary);margin-top:4px;}
+.grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+.timeline{list-style:none;position:relative;padding-left:28px;}
+.timeline::before{content:'';position:absolute;left:10px;top:0;bottom:0;width:2px;background:var(--border);}
+.timeline li{position:relative;margin-bottom:14px;}
+.timeline li::before{content:'';position:absolute;left:-22px;top:6px;width:10px;height:10px;border-radius:50%;background:var(--accent);border:2px solid var(--card);}
+.timeline-meta{font-size:11px;color:var(--text-tertiary);margin-bottom:3px;}
+.timeline-body{background:var(--bg);border-radius:var(--radius);padding:8px 10px;font-size:13px;}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px;}
+.modal{background:var(--card);border-radius:var(--radius-md);padding:24px;width:100%;max-width:540px;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.18);}
+.modal-title{font-size:16px;font-weight:700;margin-bottom:16px;}
+.form-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
+.form-row>div{flex:1;min-width:130px;}
+.prediction-bar{height:10px;border-radius:5px;background:var(--border);overflow:hidden;margin-top:6px;}
+.prediction-fill{height:100%;border-radius:5px;transition:width .6s;}
+.tip{font-size:12px;color:var(--text-tertiary);}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;background:var(--bg-sub);color:var(--text-secondary);}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:#1a1a2e;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;z-index:9999;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+.toast-error{background:#A32D2D;}.toast-info{background:#1565c0;}
+@media(max-width:700px){
+  .layout{grid-template-columns:1fr;}
+  .topbar{grid-column:1;}
+  .sidebar{display:none;}
+  .grid-3,.grid-4{grid-template-columns:repeat(2,1fr);}
+  .grid-2{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+/* ===== CONSTANTS ===== */
+const CRM_KEY='crmSystemState_v1';
+const KPI_KEY='kpiSystemState_v2';
+const TODAY=new Date();
+const REAL_Y=TODAY.getFullYear(),REAL_M=TODAY.getMonth(),REAL_D=TODAY.getDate();
+
+const DEAL_PHASES=[
+  {id:'lead',label:'リード',bg:'#F3F4F6',c:'#6B7280'},
+  {id:'approach',label:'アプローチ',bg:'#DBEAFE',c:'#1D4ED8'},
+  {id:'proposal',label:'提案',bg:'#FEF3C7',c:'#92400E'},
+  {id:'negotiation',label:'交渉',bg:'#EDE9FE',c:'#5B21B6'},
+  {id:'closing',label:'クロージング',bg:'#FCE7F3',c:'#9D174D'},
+];
+const CUST_STATUS=[
+  {id:'lead',label:'リード',bg:'#F3F4F6',c:'#6B7280'},
+  {id:'prospect',label:'見込み',bg:'#DBEAFE',c:'#1D4ED8'},
+  {id:'negotiating',label:'商談中',bg:'#FEF3C7',c:'#92400E'},
+  {id:'won',label:'成約',bg:'#DCFCE7',c:'#166534'},
+  {id:'lost',label:'失注',bg:'#FEECEC',c:'#A32D2D'},
+];
+const ACT_TYPES=[
+  {id:'call',label:'電話',icon:'ti-phone',bg:'#DBEAFE',c:'#1D4ED8'},
+  {id:'visit',label:'訪問',icon:'ti-building-community',bg:'#DCFCE7',c:'#166534'},
+  {id:'email',label:'メール',icon:'ti-mail',bg:'#FEF3C7',c:'#92400E'},
+  {id:'other',label:'その他',icon:'ti-dots',bg:'#F3F4F6',c:'#6B7280'},
+];
+
+/* ===== SHARED KPI STATE ===== */
+let kpiState=null;
+let STAFF_LIST=[];
+function loadKpiShared(){
+  try{
+    const raw=localStorage.getItem(KPI_KEY);
+    if(!raw)return;
+    kpiState=JSON.parse(raw);
+    if(Array.isArray(kpiState._staffList)&&kpiState._staffList.length)
+      STAFF_LIST=kpiState._staffList;
+  }catch(e){}
+}
+
+/* ===== STATE ===== */
+let state={
+  page:'login',role:null,user:null,
+  customers:[],deals:[],activities:[],
+  selCustId:null,
+  custFilter:{status:'all',staff:'all',q:''},
+  dealFilter:{phase:'all',staff:'all',statusF:'open'},
+  actFilter:{type:'all',staff:'all'},
+  goalOverride:null, // null = KPIシステムの契約数目標を参照
+};
+
+/* ===== PERSISTENCE ===== */
+function saveState(){try{localStorage.setItem(CRM_KEY,JSON.stringify(state));}catch(e){}}
+function loadState(){try{const r=localStorage.getItem(CRM_KEY);if(r)Object.assign(state,JSON.parse(r));}catch(e){}}
+
+/* ===== UTILITIES ===== */
+function pad2(n){return String(n).padStart(2,'0');}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+function fmt(d){if(!d)return '—';const dt=new Date(d);return `${dt.getFullYear()}/${pad2(dt.getMonth()+1)}/${pad2(dt.getDate())}`;}
+function fmtAmt(n){return n!=null&&n!==''?Number(n).toLocaleString()+'円':'—';}
+function pKey(){return `${REAL_Y}_${REAL_M}`;}
+function curMonthStr(){return `${REAL_Y}-${pad2(REAL_M+1)}`;}
+function staffName(si){return STAFF_LIST[si]!=null?STAFF_LIST[si]:'—';}
+function isAdmin(){return state.role==='admin';}
+function mySi(){return state.user;}
+function toast(msg,type='success'){
+  const t=document.createElement('div');
+  t.className='toast toast-'+type;t.textContent=msg;
+  document.body.appendChild(t);
+  setTimeout(()=>t.classList.add('show'),10);
+  setTimeout(()=>{t.classList.remove('show');setTimeout(()=>t.remove(),300);},3000);
+}
+
+/* ===== CHIPS ===== */
+function phaseChip(id){const p=DEAL_PHASES.find(x=>x.id===id)||DEAL_PHASES[0];return `<span class="chip" style="background:${p.bg};color:${p.c}">${p.label}</span>`;}
+function statusChip(id){const s=CUST_STATUS.find(x=>x.id===id)||CUST_STATUS[0];return `<span class="chip" style="background:${s.bg};color:${s.c}">${s.label}</span>`;}
+function actChip(id){const a=ACT_TYPES.find(x=>x.id===id)||ACT_TYPES[3];return `<span class="chip" style="background:${a.bg};color:${a.c}"><i class="ti ${a.icon}"></i> ${a.label}</span>`;}
+function dealStatusChip(s){return s==='won'?`<span class="chip" style="background:var(--bg-success);color:var(--text-success)">成約</span>`:s==='lost'?`<span class="chip" style="background:var(--bg-danger);color:var(--text-danger)">失注</span>`:`<span class="chip" style="background:#e3f2fd;color:#1565c0">進行中</span>`;}
+
+/* ===== MONTH-END PREDICTION ===== */
+function monthPrediction(si='all'){
+  const ms=curMonthStr();
+  const myDeals=d=>(si==='all'||d.staffSi===si);
+  // 今月成約
+  const wonD=state.deals.filter(d=>myDeals(d)&&d.status==='won'&&(d.closedAt||'').startsWith(ms));
+  const wonCount=wonD.reduce((s,d)=>s+(d.count||1),0);
+  const wonAmt=wonD.reduce((s,d)=>s+(d.amount||0),0);
+  // パイプライン（今月クロージング予定の進行中）
+  const openD=state.deals.filter(d=>myDeals(d)&&d.status==='open'&&(d.expectedCloseDate||'').startsWith(ms));
+  const pipeCount=openD.reduce((s,d)=>s+(d.count||1)*(d.probability||0)/100,0);
+  const pipeAmt=openD.reduce((s,d)=>s+(d.amount||0)*(d.probability||0)/100,0);
+  // 目標：上書き or KPIシステム参照
+  let target=state.goalOverride||0;
+  if(!state.goalOverride&&kpiState&&kpiState.goals){
+    const gd=kpiState.goals[pKey()]||{};
+    if(si==='all'){STAFF_LIST.forEach((_,i)=>{target+=(gd[i]&&gd[i]['契約数'])||0;});}
+    else{target=(gd[si]&&gd[si]['契約数'])||0;}
+  }
+  const predictCount=wonCount+Math.round(pipeCount);
+  const predictAmt=wonAmt+Math.round(pipeAmt);
+  const gap=target-predictCount;
+  const pct=target>0?Math.min(100,Math.round(predictCount/target*100)):0;
+  return{wonCount,wonAmt,pipeCount:Math.round(pipeCount),pipeAmt:Math.round(pipeAmt),predictCount,predictAmt,target,gap,pct};
+}
+
+function predComment(p){
+  if(!p.target)return{lv:'info',msg:'KPIシステムで今月の「契約数」目標を設定すると月末着地予測が表示されます。'};
+  if(p.gap<=0)return{lv:'success',msg:`目標達成見込みです！ 現在のペースを維持してください。`};
+  if(p.pct>=80)return{lv:'warn',msg:`あと <b>${p.gap}件</b> で目標達成。商談中案件のクロージングに集中しましょう。`};
+  if(p.pct>=50)return{lv:'warn',msg:`目標まで <b>${p.gap}件</b> 不足の見込みです。提案フェーズの案件を前に進めてください。`};
+  return{lv:'danger',msg:`目標に対して <b>${p.gap}件</b> 不足の見込みです。新規リード獲得とアプローチを強化してください。`};
+}
+
+/* ===== AUTH ===== */
+function getStaffPw(si){return((kpiState&&kpiState.staffPw)||{})[si]||{};}
+function getAdminPw(){return(kpiState&&kpiState.adminPw)||'admin@1234';}
+
+/* ===== LAYOUT ===== */
+function topBar(){
+  const name=isAdmin()?'管理者':esc(staffName(state.user));
+  return `<div class="topbar">
+    <div class="topbar-title"><i class="ti ti-address-book"></i> CRM</div>
+    <span class="badge"><i class="ti ti-user"></i> ${name}</span>
+    <a href="kpi_system.html" class="btn btn-sm" style="text-decoration:none"><i class="ti ti-chart-bar"></i> KPI管理</a>
+    <button class="btn btn-sm" id="logout-btn"><i class="ti ti-logout"></i> ログアウト</button>
+  </div>`;
+}
+
+function sidebar(){
+  const items=[
+    {id:'dashboard',icon:'ti-layout-dashboard',label:'ダッシュボード'},
+    {id:'customers',icon:'ti-building',label:'顧客リスト'},
+    {id:'deals',icon:'ti-briefcase',label:'案件管理'},
+    {id:'activities',icon:'ti-activity',label:'活動記録'},
+    ...(isAdmin()?[{id:'admin',icon:'ti-shield',label:'管理者ビュー'}]:[]),
+  ];
+  return `<div class="sidebar">${items.map(it=>`<div class="nav-item${state.page===it.id?' active':''}" data-nav="${it.id}"><i class="ti ${it.icon}"></i>${it.label}</div>`).join('')}</div>`;
+}
+
+/* ===== LOGIN PAGE ===== */
+function loginPage(){
+  const hasKpi=!!(kpiState&&STAFF_LIST.length);
+  return `<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:16px">
+    <div class="card" style="width:100%;max-width:360px;padding:28px">
+      <div style="text-align:center;margin-bottom:24px">
+        <div style="font-size:34px;font-weight:800;color:var(--accent)"><i class="ti ti-address-book"></i> CRM</div>
+        <div style="color:var(--text-secondary);font-size:13px;margin-top:4px">顧客・案件管理システム</div>
+      </div>
+      ${!hasKpi?`<div style="padding:10px 12px;background:var(--bg-warning);color:var(--text-warning);border-radius:var(--radius);font-size:12px;margin-bottom:14px">
+        <i class="ti ti-alert-triangle"></i> KPIシステムのデータが見つかりません。先に <a href="kpi_system.html" style="color:var(--text-warning);font-weight:600">KPI管理システム</a> を開いてログインしてください。
+      </div>`:''}
+      <div style="margin-bottom:10px"><div class="form-label">スタッフ</div>
+        <select class="select" id="login-user" style="width:100%">
+          <option value="">選択してください</option>
+          ${STAFF_LIST.map((s,i)=>`<option value="${i}">${esc(s)}</option>`).join('')}
+          <option value="admin">── 管理者 ──</option>
+        </select>
+      </div>
+      <div style="margin-bottom:16px"><div class="form-label">パスワード</div>
+        <input type="password" class="form-control" id="login-pw" placeholder="KPIシステムと同じパスワード">
+      </div>
+      <button class="btn btn-primary" id="login-btn" style="width:100%"><i class="ti ti-login"></i> ログイン</button>
+      <div style="text-align:center;margin-top:14px">
+        <a href="kpi_system.html" style="font-size:12px;color:var(--text-tertiary);text-decoration:none"><i class="ti ti-chart-bar"></i> KPI管理システムへ</a>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ===== DASHBOARD PAGE ===== */
+function dashboardPage(){
+  const si=isAdmin()?'all':mySi();
+  const pred=monthPrediction(si);
+  const comment=predComment(pred);
+  const cc={success:{bg:'var(--bg-success)',c:'var(--text-success)',icon:'ti-circle-check'},
+    warn:{bg:'var(--bg-warning)',c:'var(--text-warning)',icon:'ti-alert-triangle'},
+    danger:{bg:'var(--bg-danger)',c:'var(--text-danger)',icon:'ti-alert-circle'},
+    info:{bg:'#e3f2fd',c:'#1565c0',icon:'ti-info-circle'}}[comment.lv];
+  const fillColor=pred.pct>=100?'var(--success)':pred.pct>=70?'#f59e0b':'var(--danger)';
+
+  // パイプライン（フェーズ別）
+  const myOpenDeals=state.deals.filter(d=>d.status==='open'&&(si==='all'||d.staffSi===si));
+  const phaseRows=DEAL_PHASES.map(p=>{
+    const cnt=myOpenDeals.filter(d=>d.phase===p.id).reduce((s,d)=>s+(d.count||1),0);
+    const amt=myOpenDeals.filter(d=>d.phase===p.id).reduce((s,d)=>s+(d.amount||0),0);
+    return{...p,cnt,amt};
+  }).filter(p=>p.cnt>0);
+
+  // 最近の活動
+  const recentActs=[...state.activities].filter(a=>si==='all'||a.staffSi===si)
+    .sort((a,b)=>new Date(b.date)-new Date(a.date)||b.createdAt-a.createdAt).slice(0,6);
+
+  const gridCls=isAdmin()?'grid-4':'grid-3';
+  return `
+  <div class="${gridCls}" style="margin-bottom:14px">
+    <div class="stat-card">
+      <div class="stat-val" style="color:var(--success)">${pred.wonCount}<span style="font-size:14px;font-weight:500">件</span></div>
+      <div class="stat-label">今月の成約数</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val">${pred.predictCount}<span style="font-size:14px;font-weight:500">件</span></div>
+      <div class="stat-label">月末着地予測</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val" style="color:${pred.gap>0?'var(--danger)':'var(--success)'}">${pred.target||'—'}${pred.target?'<span style="font-size:14px;font-weight:500">件</span>':''}</div>
+      <div class="stat-label">今月目標（KPIより）</div>
+    </div>
+    ${isAdmin()?`<div class="stat-card">
+      <div class="stat-val" style="font-size:20px;color:var(--accent)">${pred.predictAmt.toLocaleString()}<span style="font-size:12px;font-weight:500">円</span></div>
+      <div class="stat-label">月末着地予測（金額）</div>
+    </div>`:''}
+  </div>
+
+  <div class="card">
+    <div class="section-title"><i class="ti ti-trending-up"></i> 月末着地予測 — ${REAL_Y}年${REAL_M+1}月</div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap">
+      <span style="font-size:13px;color:var(--text-secondary)">目標達成率</span>
+      <span style="font-size:28px;font-weight:800;color:${fillColor}">${pred.pct}%</span>
+      <span class="tip">成約 ${pred.wonCount}件 ＋ パイプライン見込み ${pred.pipeCount}件</span>
+    </div>
+    <div class="prediction-bar"><div class="prediction-fill" style="width:${pred.pct}%;background:${fillColor}"></div></div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-tertiary);margin-top:4px">
+      <span>0</span><span>目標 ${pred.target}件</span>
+    </div>
+    <div style="margin-top:12px;padding:10px 12px;border-radius:var(--radius);background:${cc.bg};color:${cc.c};font-size:13px">
+      <i class="ti ${cc.icon}"></i> <span>${comment.msg}</span>
+    </div>
+    ${isAdmin()?`<div class="tip" style="margin-top:8px">
+      成約金額: <b>${pred.wonAmt.toLocaleString()}円</b> ／
+      パイプライン見込み金額: <b>${pred.pipeAmt.toLocaleString()}円</b> ／
+      月末合計予測: <b>${pred.predictAmt.toLocaleString()}円</b>
+    </div>`:''}
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="section-title"><i class="ti ti-funnel"></i> 案件パイプライン（進行中）</div>
+      ${phaseRows.length?`<div class="table-wrap"><table class="list">
+        <thead><tr><th>フェーズ</th><th>件数</th>${isAdmin()?'<th>金額</th>':''}</tr></thead>
+        <tbody>
+          ${phaseRows.map(p=>`<tr><td>${phaseChip(p.id)}</td><td style="font-weight:600">${p.cnt}件</td>${isAdmin()?`<td>${fmtAmt(p.amt)}</td>`:''}</tr>`).join('')}
+          <tr style="font-weight:700;background:var(--bg-sub)"><td>合計</td><td>${phaseRows.reduce((s,p)=>s+p.cnt,0)}件</td>${isAdmin()?`<td>${fmtAmt(phaseRows.reduce((s,p)=>s+p.amt,0))}</td>`:''}</tr>
+        </tbody>
+      </table></div>`:'<p class="tip">進行中の案件はありません</p>'}
+    </div>
+    <div class="card">
+      <div class="section-title"><i class="ti ti-activity"></i> 最近の活動</div>
+      ${recentActs.length?`<ul class="timeline">${recentActs.map(a=>{
+        const c=state.customers.find(x=>x.id===a.customerId);
+        return `<li>
+          <div class="timeline-meta">${a.date} ${actChip(a.type)}${isAdmin()?` <b>${esc(staffName(a.staffSi))}</b>`:''}</div>
+          <div class="timeline-body">${c?`<b>${esc(c.company||c.name)}</b> — `:''}${esc(a.content)}</div>
+        </li>`;
+      }).join('')}</ul>`:'<p class="tip">活動記録がありません</p>'}
+    </div>
+  </div>`;
+}
+
+/* ===== CUSTOMER LIST PAGE ===== */
+function customersPage(){
+  const si=isAdmin()?null:mySi();
+  let custs=state.customers.filter(c=>si===null||c.staffSi===si);
+  const f=state.custFilter;
+  if(f.status!=='all')custs=custs.filter(c=>c.status===f.status);
+  if(f.staff!=='all'&&isAdmin())custs=custs.filter(c=>c.staffSi===parseInt(f.staff));
+  if(f.q)custs=custs.filter(c=>(c.company+c.name+(c.phone||'')).toLowerCase().includes(f.q.toLowerCase()));
+  custs=[...custs].sort((a,b)=>b.createdAt-a.createdAt);
+
+  return `<div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input type="text" class="form-control" id="cust-q" placeholder="社名・担当者・電話で検索" value="${esc(f.q)}" style="max-width:200px">
+        <select class="select" id="cust-filter-status">
+          <option value="all" ${f.status==='all'?'selected':''}>全ステータス</option>
+          ${CUST_STATUS.map(s=>`<option value="${s.id}" ${f.status===s.id?'selected':''}>${s.label}</option>`).join('')}
+        </select>
+        ${isAdmin()?`<select class="select" id="cust-filter-staff">
+          <option value="all" ${f.staff==='all'?'selected':''}>全担当者</option>
+          ${STAFF_LIST.map((s,i)=>`<option value="${i}" ${f.staff==i?'selected':''}>${esc(s)}</option>`).join('')}
+        </select>`:''}
+      </div>
+      <button class="btn btn-primary" id="cust-add-btn"><i class="ti ti-plus"></i> 顧客追加</button>
+    </div>
+    <div class="table-wrap"><table class="list">
+      <thead><tr><th>社名</th><th>担当者</th><th>電話</th><th>ステータス</th><th>担当営業</th><th>案件数</th><th>最終活動</th><th></th></tr></thead>
+      <tbody>${custs.length?custs.map(c=>{
+        const dealCnt=state.deals.filter(d=>d.customerId===c.id&&d.status==='open').length;
+        const lastAct=[...state.activities].filter(a=>a.customerId===c.id).sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
+        return `<tr>
+          <td><a href="#" data-cust="${c.id}" style="color:var(--accent);text-decoration:none;font-weight:600">${esc(c.company||c.name)}</a></td>
+          <td>${esc(c.name)}</td>
+          <td style="font-family:var(--font-mono);font-size:12px">${esc(c.phone||'')}</td>
+          <td>${statusChip(c.status)}</td>
+          <td>${esc(staffName(c.staffSi))}</td>
+          <td>${dealCnt?`<span style="font-weight:600;color:var(--accent)">${dealCnt}件</span>`:'—'}</td>
+          <td class="tip">${lastAct?lastAct.date:'—'}</td>
+          <td><button class="btn btn-sm" data-cust-edit="${c.id}"><i class="ti ti-edit"></i></button></td>
+        </tr>`;
+      }).join(''):`<tr><td colspan="8" style="text-align:center;padding:24px"><span class="tip">顧客が登録されていません</span></td></tr>`}
+      </tbody>
+    </table></div>
+  </div>`;
+}
+
+/* ===== CUSTOMER DETAIL PAGE ===== */
+function customerDetailPage(){
+  const c=state.customers.find(x=>x.id===state.selCustId);
+  if(!c)return `<div class="card"><button class="btn" id="back-to-custs"><i class="ti ti-arrow-left"></i> 一覧に戻る</button><p class="tip" style="margin-top:8px">顧客が見つかりません</p></div>`;
+  const myDeals=state.deals.filter(d=>d.customerId===c.id).sort((a,b)=>b.createdAt-a.createdAt);
+  const myActs=[...state.activities].filter(a=>a.customerId===c.id).sort((a,b)=>new Date(b.date)-new Date(a.date)||b.createdAt-a.createdAt);
+  const wonCount=myDeals.filter(d=>d.status==='won').reduce((s,d)=>s+(d.count||1),0);
+  const wonAmt=myDeals.filter(d=>d.status==='won').reduce((s,d)=>s+(d.amount||0),0);
+
+  return `
+  <div style="margin-bottom:12px"><button class="btn btn-sm" id="back-to-custs"><i class="ti ti-arrow-left"></i> 顧客一覧に戻る</button></div>
+  <div class="card">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+      <div>
+        <div style="font-size:20px;font-weight:800">${esc(c.company)}</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">
+          ${statusChip(c.status)}
+          <span class="tip">担当者：${esc(c.name)}</span>
+          <span class="tip">担当営業：${esc(staffName(c.staffSi))}</span>
+          <span class="tip">登録日：${fmt(c.createdAt)}</span>
+        </div>
+      </div>
+      <button class="btn btn-sm" data-cust-edit="${c.id}"><i class="ti ti-edit"></i> 編集</button>
+    </div>
+    <div class="grid-3" style="font-size:13px;gap:8px;margin-bottom:10px">
+      ${[['電話',c.phone],['メール',c.email],['業種',c.industry],['規模',c.size],['住所',c.address]].map(([l,v])=>`<div><div class="form-label">${l}</div><span>${esc(v)||'<span class="tip">—</span>'}</span></div>`).join('')}
+    </div>
+    ${c.note?`<div style="padding:8px 10px;background:var(--bg);border-radius:var(--radius);font-size:13px;color:var(--text-secondary)">${esc(c.note)}</div>`:''}
+    <div class="grid-2" style="margin-top:12px">
+      <div class="stat-card"><div class="stat-val" style="font-size:22px;color:var(--success)">${wonCount}件</div><div class="stat-label">累計成約件数</div></div>
+      ${isAdmin()?`<div class="stat-card"><div class="stat-val" style="font-size:18px">${wonAmt.toLocaleString()}円</div><div class="stat-label">累計成約金額</div></div>`:'<div></div>'}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-title" style="justify-content:space-between">
+      <span><i class="ti ti-briefcase"></i> 案件（${myDeals.length}件）</span>
+      <button class="btn btn-sm btn-primary" id="deal-add-from-cust"><i class="ti ti-plus"></i> 案件追加</button>
+    </div>
+    ${myDeals.length?`<div class="table-wrap"><table class="list">
+      <thead><tr><th>案件名</th><th>フェーズ</th><th>件数</th>${isAdmin()?'<th>金額</th>':''}<th>確度</th><th>クロージング予定</th><th>状態</th><th></th></tr></thead>
+      <tbody>${myDeals.map(d=>`<tr>
+        <td style="font-weight:600">${esc(d.title)}</td>
+        <td>${phaseChip(d.phase)}</td>
+        <td>${d.count||1}件</td>
+        ${isAdmin()?`<td>${fmtAmt(d.amount)}</td>`:''}
+        <td>${d.probability||0}%</td>
+        <td>${d.expectedCloseDate||'—'}</td>
+        <td>${dealStatusChip(d.status)}</td>
+        <td><button class="btn btn-sm" data-deal-edit="${d.id}"><i class="ti ti-edit"></i></button></td>
+      </tr>`).join('')}</tbody>
+    </table></div>`:'<p class="tip">案件がありません</p>'}
+  </div>
+
+  <div class="card">
+    <div class="section-title" style="justify-content:space-between">
+      <span><i class="ti ti-activity"></i> アクティビティタイムライン（${myActs.length}件）</span>
+      <button class="btn btn-sm btn-primary" id="act-add-from-cust"><i class="ti ti-plus"></i> 活動記録</button>
+    </div>
+    ${myActs.length?`<ul class="timeline">${myActs.map(a=>`<li>
+      <div class="timeline-meta">${a.date} ${actChip(a.type)} <b>${esc(staffName(a.staffSi))}</b></div>
+      <div class="timeline-body">${esc(a.content)}</div>
+    </li>`).join('')}</ul>`:'<p class="tip">活動記録がありません</p>'}
+  </div>`;
+}
+
+/* ===== DEALS PAGE ===== */
+function dealsPage(){
+  const si=isAdmin()?null:mySi();
+  let deals=state.deals.filter(d=>si===null||d.staffSi===si);
+  const f=state.dealFilter;
+  if(f.phase!=='all')deals=deals.filter(d=>d.phase===f.phase);
+  if(f.staff!=='all'&&isAdmin())deals=deals.filter(d=>d.staffSi===parseInt(f.staff));
+  const open=deals.filter(d=>d.status==='open').sort((a,b)=>b.createdAt-a.createdAt);
+  const closed=deals.filter(d=>d.status!=='open').sort((a,b)=>b.createdAt-a.createdAt);
+  const showClosed=state.dealFilter.statusF==='all';
+
+  const dealRow=d=>{
+    const c=state.customers.find(x=>x.id===d.customerId);
+    return `<tr>
+      <td style="font-weight:600">${esc(d.title)}</td>
+      <td><a href="#" data-cust="${d.customerId}" style="color:var(--accent);text-decoration:none">${esc(c?c.company||c.name:'—')}</a></td>
+      <td>${phaseChip(d.phase)}</td>
+      <td>${d.count||1}件</td>
+      ${isAdmin()?`<td>${fmtAmt(d.amount)}</td>`:''}
+      <td>${d.probability||0}%</td>
+      <td>${d.expectedCloseDate||'—'}</td>
+      <td>${esc(staffName(d.staffSi))}</td>
+      <td>${dealStatusChip(d.status)}</td>
+      <td><button class="btn btn-sm" data-deal-edit="${d.id}"><i class="ti ti-edit"></i></button></td>
+    </tr>`;
+  };
+
+  return `<div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <select class="select" id="deal-filter-phase">
+          <option value="all" ${f.phase==='all'?'selected':''}>全フェーズ</option>
+          ${DEAL_PHASES.map(p=>`<option value="${p.id}" ${f.phase===p.id?'selected':''}>${p.label}</option>`).join('')}
+        </select>
+        ${isAdmin()?`<select class="select" id="deal-filter-staff">
+          <option value="all" ${f.staff==='all'?'selected':''}>全担当者</option>
+          ${STAFF_LIST.map((s,i)=>`<option value="${i}" ${f.staff==i?'selected':''}>${esc(s)}</option>`).join('')}
+        </select>`:''}
+        <select class="select" id="deal-filter-status">
+          <option value="open" ${f.statusF==='open'?'selected':''}>進行中のみ</option>
+          <option value="all" ${f.statusF==='all'?'selected':''}>全て（成約・失注含む）</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" id="deal-add-btn"><i class="ti ti-plus"></i> 案件追加</button>
+    </div>
+    <div class="section-title"><i class="ti ti-clock"></i> 進行中（${open.length}件）${isAdmin()&&open.length?` — 合計 <span style="color:var(--accent)">${fmtAmt(open.reduce((s,d)=>s+(d.amount||0),0))}</span>`:''}
+    </div>
+    <div class="table-wrap"><table class="list">
+      <thead><tr><th>案件名</th><th>顧客</th><th>フェーズ</th><th>件数</th>${isAdmin()?'<th>金額</th>':''}<th>確度</th><th>クロージング予定</th><th>担当</th><th>状態</th><th></th></tr></thead>
+      <tbody>${open.length?open.map(dealRow).join(''):`<tr><td colspan="10" style="text-align:center;padding:20px"><span class="tip">進行中の案件はありません</span></td></tr>`}</tbody>
+    </table></div>
+    ${showClosed&&closed.length?`<div class="section-title" style="margin-top:16px"><i class="ti ti-check"></i> 完了（成約・失注）（${closed.length}件）${isAdmin()?` — 成約金額合計 <span style="color:var(--success)">${fmtAmt(closed.filter(d=>d.status==='won').reduce((s,d)=>s+(d.amount||0),0))}</span>`:''}</div>
+    <div class="table-wrap"><table class="list">
+      <thead><tr><th>案件名</th><th>顧客</th><th>フェーズ</th><th>件数</th>${isAdmin()?'<th>金額</th>':''}<th>確度</th><th>クロージング予定</th><th>担当</th><th>状態</th><th></th></tr></thead>
+      <tbody>${closed.map(dealRow).join('')}</tbody>
+    </table></div>`:''}
+  </div>`;
+}
+
+/* ===== ACTIVITIES PAGE ===== */
+function activitiesPage(){
+  const si=isAdmin()?null:mySi();
+  let acts=[...state.activities].filter(a=>si===null||a.staffSi===si);
+  const f=state.actFilter;
+  if(f.type!=='all')acts=acts.filter(a=>a.type===f.type);
+  if(f.staff!=='all'&&isAdmin())acts=acts.filter(a=>a.staffSi===parseInt(f.staff));
+  acts.sort((a,b)=>new Date(b.date)-new Date(a.date)||b.createdAt-a.createdAt);
+
+  return `<div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <select class="select" id="act-filter-type">
+          <option value="all" ${f.type==='all'?'selected':''}>全種別</option>
+          ${ACT_TYPES.map(t=>`<option value="${t.id}" ${f.type===t.id?'selected':''}>${t.label}</option>`).join('')}
+        </select>
+        ${isAdmin()?`<select class="select" id="act-filter-staff">
+          <option value="all" ${f.staff==='all'?'selected':''}>全担当者</option>
+          ${STAFF_LIST.map((s,i)=>`<option value="${i}" ${f.staff==i?'selected':''}>${esc(s)}</option>`).join('')}
+        </select>`:''}
+      </div>
+      <button class="btn btn-primary" id="act-add-btn"><i class="ti ti-plus"></i> 活動記録</button>
+    </div>
+    <div class="table-wrap"><table class="list">
+      <thead><tr><th>日付</th><th>種別</th><th>顧客</th><th>内容</th>${isAdmin()?'<th>担当者</th>':''}<th></th></tr></thead>
+      <tbody>${acts.length?acts.map(a=>{
+        const c=state.customers.find(x=>x.id===a.customerId);
+        return `<tr>
+          <td style="font-family:var(--font-mono);white-space:nowrap">${a.date}</td>
+          <td>${actChip(a.type)}</td>
+          <td>${c?`<a href="#" data-cust="${c.id}" style="color:var(--accent);text-decoration:none">${esc(c.company||c.name)}</a>`:'<span class="tip">—</span>'}</td>
+          <td style="max-width:260px">${esc(a.content)}</td>
+          ${isAdmin()?`<td>${esc(staffName(a.staffSi))}</td>`:''}
+          <td><button class="btn btn-sm" data-act-del="${a.id}" style="color:var(--text-danger)"><i class="ti ti-trash"></i></button></td>
+        </tr>`;
+      }).join(''):`<tr><td colspan="6" style="text-align:center;padding:24px"><span class="tip">活動記録がありません</span></td></tr>`}
+      </tbody>
+    </table></div>
+  </div>`;
+}
+
+/* ===== ADMIN PAGE ===== */
+function adminPage(){
+  const ms=curMonthStr();
+  const rows=STAFF_LIST.map((s,i)=>{
+    const pred=monthPrediction(i);
+    const custCnt=state.customers.filter(c=>c.staffSi===i).length;
+    const openCnt=state.deals.filter(d=>d.staffSi===i&&d.status==='open').length;
+    const wonAmt=state.deals.filter(d=>d.staffSi===i&&d.status==='won'&&(d.closedAt||'').startsWith(ms)).reduce((s,d)=>s+(d.amount||0),0);
+    const actCnt=state.activities.filter(a=>a.staffSi===i&&(a.date||'').startsWith(ms.slice(0,7))).length;
+    const fillC=pred.pct>=100?'var(--text-success)':pred.pct>=70?'var(--text-warning)':'var(--text-danger)';
+    return `<tr>
+      <td style="font-weight:600">${esc(s)}</td>
+      <td>${custCnt}社</td>
+      <td>${openCnt}件</td>
+      <td style="font-weight:700;color:var(--success)">${pred.wonCount}件</td>
+      <td>${fmtAmt(wonAmt)}</td>
+      <td>${pred.target||'—'}件</td>
+      <td style="font-weight:700;color:${fillC}">${pred.target?pred.pct+'%':'—'}</td>
+      <td>${pred.target?(pred.gap>0?`<span style="color:var(--text-danger)">−${pred.gap}件</span>`:`<span style="color:var(--text-success)">達成見込み</span>`):'—'}</td>
+      <td>${actCnt}件</td>
+    </tr>`;
+  }).join('');
+  const totalPred=monthPrediction('all');
+  const totalWonAmt=state.deals.filter(d=>d.status==='won'&&(d.closedAt||'').startsWith(ms)).reduce((s,d)=>s+(d.amount||0),0);
+
+  return `<div class="card">
+    <div class="section-title"><i class="ti ti-shield"></i> 管理者ビュー — ${REAL_Y}年${REAL_M+1}月 スタッフ別サマリー</div>
+    <div class="grid-4" style="margin-bottom:16px">
+      <div class="stat-card"><div class="stat-val" style="color:var(--success)">${totalPred.wonCount}<span style="font-size:14px">件</span></div><div class="stat-label">今月チーム成約合計</div></div>
+      <div class="stat-card"><div class="stat-val" style="font-size:18px">${totalWonAmt.toLocaleString()}<span style="font-size:12px">円</span></div><div class="stat-label">今月成約金額合計</div></div>
+      <div class="stat-card"><div class="stat-val">${totalPred.predictCount}<span style="font-size:14px">件</span></div><div class="stat-label">月末着地予測（件数）</div></div>
+      <div class="stat-card"><div class="stat-val" style="font-size:18px">${totalPred.predictAmt.toLocaleString()}<span style="font-size:12px">円</span></div><div class="stat-label">月末着地予測（金額）</div></div>
+    </div>
+    <div class="table-wrap"><table class="list">
+      <thead><tr><th>担当者</th><th>顧客数</th><th>進行中案件</th><th>今月成約</th><th>今月成約金額</th><th>目標</th><th>達成率</th><th>差分</th><th>今月活動数</th></tr></thead>
+      <tbody>${rows}
+        <tr style="font-weight:700;background:var(--bg-sub)">
+          <td>チーム合計</td>
+          <td>${state.customers.length}社</td>
+          <td>${state.deals.filter(d=>d.status==='open').length}件</td>
+          <td style="color:var(--text-success)">${totalPred.wonCount}件</td>
+          <td>${fmtAmt(totalWonAmt)}</td>
+          <td>${totalPred.target||'—'}件</td>
+          <td style="color:${totalPred.pct>=100?'var(--text-success)':totalPred.pct>=70?'var(--text-warning)':'var(--text-danger)'}">${totalPred.target?totalPred.pct+'%':'—'}</td>
+          <td>${totalPred.target?(totalPred.gap>0?`<span style="color:var(--text-danger)">−${totalPred.gap}件</span>`:'<span style="color:var(--text-success)">達成見込み</span>'):'—'}</td>
+          <td>${state.activities.filter(a=>(a.date||'').startsWith(ms.slice(0,7))).length}件</td>
+        </tr>
+      </tbody>
+    </table></div>
+  </div>`;
+}
+
+/* ===== MODALS ===== */
+function custModal(id=null){
+  const c=id?state.customers.find(x=>x.id===id)||{}:{};
+  const defSi=isAdmin()?(c.staffSi!=null?c.staffSi:0):mySi();
+  return `<div class="modal-overlay" id="cust-modal"><div class="modal">
+    <div class="modal-title">${id?'顧客情報を編集':'新規顧客登録'}</div>
+    <div class="form-row">
+      <div><div class="form-label">社名 <span style="color:var(--danger)">*</span></div><input class="form-control" id="cm-company" value="${esc(c.company||'')}"></div>
+      <div><div class="form-label">担当者名</div><input class="form-control" id="cm-name" value="${esc(c.name||'')}"></div>
+    </div>
+    <div class="form-row">
+      <div><div class="form-label">電話</div><input class="form-control" id="cm-phone" value="${esc(c.phone||'')}"></div>
+      <div><div class="form-label">メール</div><input class="form-control" id="cm-email" value="${esc(c.email||'')}"></div>
+    </div>
+    <div class="form-row">
+      <div><div class="form-label">業種</div><input class="form-control" id="cm-industry" value="${esc(c.industry||'')}"></div>
+      <div><div class="form-label">規模</div><input class="form-control" id="cm-size" placeholder="例：従業員50名" value="${esc(c.size||'')}"></div>
+    </div>
+    <div class="form-row">
+      <div style="flex:2"><div class="form-label">住所</div><input class="form-control" id="cm-address" value="${esc(c.address||'')}"></div>
+      <div><div class="form-label">ステータス</div><select class="select" id="cm-status" style="width:100%">
+        ${CUST_STATUS.map(s=>`<option value="${s.id}" ${(c.status||'lead')===s.id?'selected':''}>${s.label}</option>`).join('')}
+      </select></div>
+    </div>
+    ${isAdmin()?`<div style="margin-bottom:12px"><div class="form-label">担当営業</div><select class="select" id="cm-staff" style="width:100%">
+      ${STAFF_LIST.map((s,i)=>`<option value="${i}" ${defSi===i?'selected':''}>${esc(s)}</option>`).join('')}
+    </select></div>`:''}
+    <div style="margin-bottom:16px"><div class="form-label">メモ</div><textarea class="form-control" id="cm-note" rows="2">${esc(c.note||'')}</textarea></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      ${id?`<button class="btn" style="color:var(--text-danger);margin-right:auto" id="cm-del"><i class="ti ti-trash"></i> 削除</button>`:''}
+      <button class="btn" id="cm-cancel">キャンセル</button>
+      <button class="btn btn-primary" id="cm-save">${id?'保存':'登録'}</button>
+    </div>
+  </div></div>`;
+}
+
+function dealModal(id=null,preCustId=null){
+  const d=id?state.deals.find(x=>x.id===id)||{}:{};
+  const custId=d.customerId||preCustId||'';
+  const defSi=isAdmin()?(d.staffSi!=null?d.staffSi:0):mySi();
+  const today=`${REAL_Y}-${pad2(REAL_M+1)}-${pad2(REAL_D)}`;
+  return `<div class="modal-overlay" id="deal-modal"><div class="modal">
+    <div class="modal-title">${id?'案件を編集':'新規案件登録'}</div>
+    <div class="form-row">
+      <div style="flex:2"><div class="form-label">案件名 <span style="color:var(--danger)">*</span></div><input class="form-control" id="dm-title" value="${esc(d.title||'')}"></div>
+      <div><div class="form-label">顧客 <span style="color:var(--danger)">*</span></div><select class="select" id="dm-cust" style="width:100%">
+        <option value="">選択</option>
+        ${state.customers.map(c=>`<option value="${c.id}" ${custId===c.id?'selected':''}>${esc(c.company||c.name)}</option>`).join('')}
+      </select></div>
+    </div>
+    <div class="form-row">
+      <div><div class="form-label">件数</div><input type="number" class="form-control" id="dm-count" min="1" value="${d.count||1}"></div>
+      <div><div class="form-label">金額（円）${isAdmin()?'':'<span class="tip">—</span>'}</div>
+        ${isAdmin()?`<input type="number" class="form-control" id="dm-amount" placeholder="0" value="${d.amount||''}">`:`<input class="form-control" disabled placeholder="管理者のみ">`}
+      </div>
+      <div><div class="form-label">確度（%）</div><input type="number" class="form-control" id="dm-prob" min="0" max="100" value="${d.probability!=null?d.probability:50}"></div>
+    </div>
+    <div class="form-row">
+      <div><div class="form-label">フェーズ</div><select class="select" id="dm-phase" style="width:100%">
+        ${DEAL_PHASES.map(p=>`<option value="${p.id}" ${(d.phase||'lead')===p.id?'selected':''}>${p.label}</option>`).join('')}
+      </select></div>
+      <div><div class="form-label">クロージング予定日</div><input type="date" class="form-control" id="dm-close-date" value="${d.expectedCloseDate||today}"></div>
+      <div><div class="form-label">状態</div><select class="select" id="dm-status" style="width:100%">
+        <option value="open" ${(d.status||'open')==='open'?'selected':''}>進行中</option>
+        <option value="won" ${d.status==='won'?'selected':''}>成約</option>
+        <option value="lost" ${d.status==='lost'?'selected':''}>失注</option>
+      </select></div>
+    </div>
+    ${isAdmin()?`<div style="margin-bottom:12px"><div class="form-label">担当営業</div><select class="select" id="dm-staff" style="width:100%">
+      ${STAFF_LIST.map((s,i)=>`<option value="${i}" ${defSi===i?'selected':''}>${esc(s)}</option>`).join('')}
+    </select></div>`:''}
+    <div style="margin-bottom:16px"><div class="form-label">メモ</div><textarea class="form-control" id="dm-note" rows="2">${esc(d.note||'')}</textarea></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      ${id?`<button class="btn" style="color:var(--text-danger);margin-right:auto" id="dm-del"><i class="ti ti-trash"></i> 削除</button>`:''}
+      <button class="btn" id="dm-cancel">キャンセル</button>
+      <button class="btn btn-primary" id="dm-save">${id?'保存':'登録'}</button>
+    </div>
+  </div></div>`;
+}
+
+function actModal(id=null,preCustId=null){
+  const a=id?state.activities.find(x=>x.id===id)||{}:{};
+  const custId=a.customerId||preCustId||'';
+  const defSi=isAdmin()?(a.staffSi!=null?a.staffSi:0):mySi();
+  const today=`${REAL_Y}-${pad2(REAL_M+1)}-${pad2(REAL_D)}`;
+  return `<div class="modal-overlay" id="act-modal"><div class="modal">
+    <div class="modal-title">${id?'活動記録を編集':'活動記録を追加'}</div>
+    <div class="form-row">
+      <div><div class="form-label">日付 <span style="color:var(--danger)">*</span></div><input type="date" class="form-control" id="am-date" value="${a.date||today}"></div>
+      <div><div class="form-label">種別</div><select class="select" id="am-type" style="width:100%">
+        ${ACT_TYPES.map(t=>`<option value="${t.id}" ${(a.type||'call')===t.id?'selected':''}>${t.label}</option>`).join('')}
+      </select></div>
+      <div><div class="form-label">顧客</div><select class="select" id="am-cust" style="width:100%">
+        <option value="">— 未紐づけ —</option>
+        ${state.customers.filter(c=>isAdmin()||c.staffSi===mySi()).map(c=>`<option value="${c.id}" ${custId===c.id?'selected':''}>${esc(c.company||c.name)}</option>`).join('')}
+      </select></div>
+    </div>
+    ${isAdmin()?`<div style="margin-bottom:12px"><div class="form-label">担当者</div><select class="select" id="am-staff" style="width:100%">
+      ${STAFF_LIST.map((s,i)=>`<option value="${i}" ${defSi===i?'selected':''}>${esc(s)}</option>`).join('')}
+    </select></div>`:''}
+    <div style="margin-bottom:16px"><div class="form-label">内容 <span style="color:var(--danger)">*</span></div><textarea class="form-control" id="am-content" rows="3" placeholder="活動内容を入力してください">${esc(a.content||'')}</textarea></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" id="am-cancel">キャンセル</button>
+      <button class="btn btn-primary" id="am-save">保存</button>
+    </div>
+  </div></div>`;
+}
+
+/* ===== MODAL HANDLERS ===== */
+function showCustModal(id=null){
+  document.body.insertAdjacentHTML('beforeend',custModal(id));
+  const ov=document.getElementById('cust-modal');
+  ov.onclick=e=>{if(e.target===ov)ov.remove();};
+  document.getElementById('cm-cancel').onclick=()=>ov.remove();
+  const del=document.getElementById('cm-del');
+  if(del)del.onclick=()=>{
+    if(!confirm('この顧客と関連する案件・活動を全て削除しますか？'))return;
+    state.customers=state.customers.filter(c=>c.id!==id);
+    state.deals=state.deals.filter(d=>d.customerId!==id);
+    state.activities=state.activities.filter(a=>a.customerId!==id);
+    ov.remove();toast('顧客を削除しました','info');render();
+  };
+  document.getElementById('cm-save').onclick=()=>{
+    const company=(document.getElementById('cm-company').value||'').trim();
+    if(!company){toast('社名を入力してください','error');return;}
+    const staffSi=isAdmin()?parseInt(document.getElementById('cm-staff').value):mySi();
+    const data={company,name:(document.getElementById('cm-name').value||'').trim(),phone:(document.getElementById('cm-phone').value||'').trim(),email:(document.getElementById('cm-email').value||'').trim(),industry:(document.getElementById('cm-industry').value||'').trim(),size:(document.getElementById('cm-size').value||'').trim(),address:(document.getElementById('cm-address').value||'').trim(),status:document.getElementById('cm-status').value,note:(document.getElementById('cm-note').value||'').trim(),staffSi};
+    if(id){const idx=state.customers.findIndex(c=>c.id===id);if(idx>=0)state.customers[idx]={...state.customers[idx],...data};toast('顧客情報を更新しました');}
+    else{state.customers.push({id:genId(),createdAt:Date.now(),...data});toast('顧客を登録しました');}
+    ov.remove();render();
+  };
+}
+
+function showDealModal(id=null,preCustId=null){
+  document.body.insertAdjacentHTML('beforeend',dealModal(id,preCustId));
+  const ov=document.getElementById('deal-modal');
+  ov.onclick=e=>{if(e.target===ov)ov.remove();};
+  document.getElementById('dm-cancel').onclick=()=>ov.remove();
+  const del=document.getElementById('dm-del');
+  if(del)del.onclick=()=>{state.deals=state.deals.filter(d=>d.id!==id);ov.remove();toast('案件を削除しました','info');render();};
+  document.getElementById('dm-save').onclick=()=>{
+    const title=(document.getElementById('dm-title').value||'').trim();
+    const custId=document.getElementById('dm-cust').value;
+    if(!title){toast('案件名を入力してください','error');return;}
+    if(!custId){toast('顧客を選択してください','error');return;}
+    const status=document.getElementById('dm-status').value;
+    const staffSi=isAdmin()?parseInt(document.getElementById('dm-staff').value):mySi();
+    const amtEl=document.getElementById('dm-amount');
+    const today=`${REAL_Y}-${pad2(REAL_M+1)}-${pad2(REAL_D)}`;
+    const existingClosedAt=id?state.deals.find(d=>d.id===id)?.closedAt:null;
+    const data={title,customerId:custId,count:parseInt(document.getElementById('dm-count').value)||1,amount:amtEl&&!amtEl.disabled?parseFloat(amtEl.value)||0:0,phase:document.getElementById('dm-phase').value,probability:parseInt(document.getElementById('dm-prob').value)||0,expectedCloseDate:document.getElementById('dm-close-date').value,status,staffSi,note:(document.getElementById('dm-note').value||'').trim(),closedAt:status!=='open'?(existingClosedAt||today):null};
+    if(id){const idx=state.deals.findIndex(d=>d.id===id);if(idx>=0)state.deals[idx]={...state.deals[idx],...data};toast('案件を更新しました');}
+    else{state.deals.push({id:genId(),createdAt:Date.now(),...data});toast('案件を登録しました');}
+    ov.remove();render();
+  };
+}
+
+function showActModal(id=null,preCustId=null){
+  document.body.insertAdjacentHTML('beforeend',actModal(id,preCustId));
+  const ov=document.getElementById('act-modal');
+  ov.onclick=e=>{if(e.target===ov)ov.remove();};
+  document.getElementById('am-cancel').onclick=()=>ov.remove();
+  document.getElementById('am-save').onclick=()=>{
+    const date=document.getElementById('am-date').value;
+    const content=(document.getElementById('am-content').value||'').trim();
+    if(!date){toast('日付を入力してください','error');return;}
+    if(!content){toast('内容を入力してください','error');return;}
+    const staffSi=isAdmin()?parseInt(document.getElementById('am-staff').value):mySi();
+    const data={date,type:document.getElementById('am-type').value,customerId:document.getElementById('am-cust').value||null,content,staffSi};
+    if(id){const idx=state.activities.findIndex(a=>a.id===id);if(idx>=0)state.activities[idx]={...state.activities[idx],...data};toast('活動記録を更新しました');}
+    else{state.activities.push({id:genId(),createdAt:Date.now(),...data});toast('活動記録を追加しました');}
+    ov.remove();render();
+  };
+}
+
+/* ===== RENDER ===== */
+function render(){
+  loadKpiShared();
+  saveState();
+  const app=document.getElementById('app');
+  if(!state.role||state.page==='login'){
+    state.page='login';app.innerHTML=loginPage();bindLogin();return;
+  }
+  const pages={dashboard:dashboardPage,customers:customersPage,customerDetail:customerDetailPage,deals:dealsPage,activities:activitiesPage,admin:adminPage};
+  const content=(pages[state.page]||dashboardPage)();
+  app.innerHTML=`<div class="layout">${topBar()}${sidebar()}<div class="content">${content}</div></div>`;
+  bindPage();
+}
+
+/* ===== BIND ===== */
+function bindLogin(){
+  const btn=document.getElementById('login-btn');
+  if(!btn)return;
+  const doLogin=()=>{
+    const uVal=(document.getElementById('login-user')||{}).value||'';
+    const pw=(document.getElementById('login-pw')||{}).value||'';
+    if(!uVal){toast('スタッフを選択してください','error');return;}
+    if(uVal==='admin'){
+      if(pw!==getAdminPw()){toast('パスワードが違います','error');return;}
+      state.role='admin';state.user=null;
+    }else{
+      const si=parseInt(uVal);
+      const spw=getStaffPw(si);
+      if(pw!==(spw.pw||'kpi@1234')){toast('パスワードが違います','error');return;}
+      state.role='staff';state.user=si;
+    }
+    state.page='dashboard';render();
+  };
+  btn.onclick=doLogin;
+  const pw=document.getElementById('login-pw');
+  if(pw)pw.onkeydown=e=>{if(e.key==='Enter')doLogin();};
+}
+
+function bindPage(){
+  // ログアウト
+  const lo=document.getElementById('logout-btn');
+  if(lo)lo.onclick=()=>{state.role=null;state.user=null;state.page='login';render();};
+  // ナビ
+  document.querySelectorAll('[data-nav]').forEach(el=>{el.onclick=()=>{state.page=el.dataset.nav;render();};});
+  // 顧客リンク（詳細ページへ）
+  document.querySelectorAll('[data-cust]').forEach(el=>{el.onclick=e=>{e.preventDefault();state.selCustId=el.dataset.cust;state.page='customerDetail';render();};});
+  // 戻る
+  const back=document.getElementById('back-to-custs');
+  if(back)back.onclick=()=>{state.page='customers';render();};
+  // フィルター
+  const cq=document.getElementById('cust-q');if(cq)cq.oninput=()=>{state.custFilter.q=cq.value;render();};
+  const cfs=document.getElementById('cust-filter-status');if(cfs)cfs.onchange=()=>{state.custFilter.status=cfs.value;render();};
+  const cfst=document.getElementById('cust-filter-staff');if(cfst)cfst.onchange=()=>{state.custFilter.staff=cfst.value;render();};
+  const dfp=document.getElementById('deal-filter-phase');if(dfp)dfp.onchange=()=>{state.dealFilter.phase=dfp.value;render();};
+  const dfst=document.getElementById('deal-filter-staff');if(dfst)dfst.onchange=()=>{state.dealFilter.staff=dfst.value;render();};
+  const dfstt=document.getElementById('deal-filter-status');if(dfstt)dfstt.onchange=()=>{state.dealFilter.statusF=dfstt.value;render();};
+  const aftp=document.getElementById('act-filter-type');if(aftp)aftp.onchange=()=>{state.actFilter.type=aftp.value;render();};
+  const afst=document.getElementById('act-filter-staff');if(afst)afst.onchange=()=>{state.actFilter.staff=afst.value;render();};
+  // 追加ボタン
+  const cAdd=document.getElementById('cust-add-btn');if(cAdd)cAdd.onclick=()=>showCustModal();
+  const dAdd=document.getElementById('deal-add-btn');if(dAdd)dAdd.onclick=()=>showDealModal();
+  const aAdd=document.getElementById('act-add-btn');if(aAdd)aAdd.onclick=()=>showActModal();
+  const dfc=document.getElementById('deal-add-from-cust');if(dfc)dfc.onclick=()=>showDealModal(null,state.selCustId);
+  const afc=document.getElementById('act-add-from-cust');if(afc)afc.onclick=()=>showActModal(null,state.selCustId);
+  // 編集ボタン
+  document.querySelectorAll('[data-cust-edit]').forEach(b=>{b.onclick=e=>{e.stopPropagation();showCustModal(b.dataset.custEdit);};});
+  document.querySelectorAll('[data-deal-edit]').forEach(b=>{b.onclick=e=>{e.stopPropagation();showDealModal(b.dataset.dealEdit);};});
+  // 活動削除
+  document.querySelectorAll('[data-act-del]').forEach(b=>{b.onclick=()=>{
+    state.activities=state.activities.filter(a=>a.id!==b.dataset.actDel);
+    toast('活動記録を削除しました','info');render();
+  };});
+}
+
+/* ===== INIT ===== */
+loadKpiShared();
+loadState();
+render();
+</script>
+</body>
+</html>

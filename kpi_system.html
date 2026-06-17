@@ -220,6 +220,18 @@ const PREF_SLOTS=[
   {label:'12:00〜21:00', start:'12:00',end:'21:00',code:'遅'},
   {label:'17:00〜翌2:00',start:'17:00',end:'02:00',code:'夜'},
 ];
+// 時刻プルダウン用オプション生成（startH〜endH-1時 30分刻み。h>=24は「翌HH:MM」表示・値はHH:MM）
+function timeOpts(sel='',startH=6,endH=24){
+  let h='';
+  for(let i=startH;i<endH;i++){
+    for(let m=0;m<60;m+=30){
+      const rh=i%24,hh=pad2(rh),mm=m===0?'00':'30';
+      const v=`${hh}:${mm}`,lbl=i>=24?`翌${hh}:${mm}`:v;
+      h+=`<option value="${v}" ${sel===v?'selected':''}>${lbl}</option>`;
+    }
+  }
+  return h;
+}
 const TODAY=new Date();
 // 実際の今日（打刻など「現在」操作はこちらを使う）
 const REAL_Y=TODAY.getFullYear(),REAL_M=TODAY.getMonth(),REAL_D=TODAY.getDate();
@@ -280,6 +292,7 @@ let state={
   shiftPrefs:{}, // 翌月シフト希望：{periodKey:{si:{submitted,submittedAt,days:{ds:{start,end}|null}}}}
   shiftChangeReqs:[], // シフト修正依頼：[{id,si,date,start,end,reason,status,by,createdAt}]
   shiftRemind:{}, // シフト希望リマインド：{si:true} 次回ログイン時にトースト表示
+  shiftDeadline:20, // シフト希望提出期限（毎月 __日。管理者「シフト」タブで変更可）
   teamKpi:'コール数',teamTab:'rank',
   adminTab:'proxy',goalStaff:0, // goalStaffは目標設定専用（activeStaffの'total'流入によるクラッシュ防止）
   proxyStaff:0,proxyStatus:{},proxyLog:[],proxyWorkStart:{},proxyBreakStart:{},proxyTotalBreak:{},
@@ -442,6 +455,7 @@ function loadState(){
     state.greetingMsg=null;state.greetingType=null;
     state.viewYear=REAL_Y;state.viewMonth=REAL_M; // リロード時は当月から開始
     if(!state._gen)state._gen={};
+    if(typeof state.shiftDeadline!=='number'||state.shiftDeadline<1||state.shiftDeadline>28)state.shiftDeadline=20;
     return true;
   }catch(e){return false;}
 }
@@ -727,10 +741,10 @@ function computeAlerts(){
     let earlyExitDays=0;
     getDayLogs(si).forEach(d=>{const ds=`${Y}-${pad2(M+1)}-${pad2(d.d)}`;const dev=shiftDeviation(si,ds);if(dev&&dev.type==='early'&&dev.level==='danger')earlyExitDays++;});
     if(earlyExitDays>=2)alerts.push({lv:'danger',s,msg:`シフト早退が${earlyExitDays}日（定時より60分以上）`});
-    // 翌月シフト希望未提出アラート（今月20日以降）
-    if(IS_CURRENT&&REAL_D>=20){
+    // 翌月シフト希望未提出アラート（提出期限以降）
+    if(IS_CURRENT&&REAL_D>=(state.shiftDeadline||20)){
       const nmk=nextMonthKey();const pd=((state.shiftPrefs||{})[nmk]||{})[si];
-      if(!pd||!pd.submitted)alerts.push({lv:'warn',s,msg:`${nextMonthLabel()}シフト希望が未提出（締切：今月20日）`});
+      if(!pd||!pd.submitted)alerts.push({lv:'warn',s,msg:`${nextMonthLabel()}シフト希望が未提出（締切：今月${state.shiftDeadline||20}日）`});
     }
   });
   return alerts;
@@ -1256,7 +1270,7 @@ function shiftPrefCardHTML(si){
   const prefData=((state.shiftPrefs||{})[nmk]||{})[si];
   const submitted=prefData&&prefData.submitted;
   const days=(prefData&&prefData.days)||{};
-  const deadlinePassed=REAL_D>20;
+  const deadlinePassed=REAL_D>(state.shiftDeadline||20);
   const stChip={pending:{t:'承認待ち',bg:'var(--bg-warning)',c:'var(--text-warning)'},approved:{t:'承認',bg:'var(--bg-success)',c:'var(--text-success)'},rejected:{t:'却下',bg:'var(--bg-danger)',c:'var(--text-danger)'}};
   const myChangeReqs=(state.shiftChangeReqs||[]).filter(r=>r.si===si).slice(-8).reverse();
 
@@ -1265,37 +1279,44 @@ function shiftPrefCardHTML(si){
     const dow=['日','月','火','水','木','金','土'][new Date(nmy,nmm-1,d).getDay()];
     const isWE=new Date(nmy,nmm-1,d).getDay()===0||new Date(nmy,nmm-1,d).getDay()===6;
     const saved=days[ds]; // {start,end} or null(=絶対休み) or undefined(=未設定=休み扱い)
-    const selVal=saved===null?'off':(saved?`${saved.start}-${saved.end}`:'');
+    const startVal=saved===null?'off':(saved?saved.start:'');
+    const endVal=saved&&saved.end?saved.end:'18:00';
     if(submitted){
+      const endDisp=saved&&saved.end<saved.start?'翌'+saved.end:saved&&saved.end;
       const disp=saved===null?`<span class="chip" style="background:#fcebeb;color:#A32D2D;font-size:12px">🔴 絶対休み</span>`:
-        saved?`<span style="font-size:13px;font-family:var(--font-mono)">${saved.start}〜${saved.end}</span>`:
+        saved?`<span style="font-size:13px;font-family:var(--font-mono)">${saved.start}〜${endDisp}</span>`:
         `<span style="color:var(--text-tertiary);font-size:12px">—（休み扱い）</span>`;
       return `<tr style="${isWE?'background:#fafafa':''}"><td style="width:30px;text-align:center;font-family:var(--font-mono);font-size:13px">${d}</td><td style="width:22px;text-align:center;font-size:12px;color:${isWE?'#A32D2D':'var(--text-secondary)'}">${dow}</td><td>${disp}</td></tr>`;
     }
     return `<tr style="${isWE?'background:#fafafa':''}"><td style="width:30px;text-align:center;font-family:var(--font-mono);font-size:13px">${d}</td><td style="width:22px;text-align:center;font-size:12px;color:${isWE?'#A32D2D':'var(--text-secondary)'}">${dow}</td><td>
-      <select class="form-control" style="padding:3px 6px;font-size:12px" data-shiftpref-ds="${ds}">
-        <option value="">—（休み扱い）</option>
-        ${PREF_SLOTS.map(s=>`<option value="${s.start}-${s.end}" ${selVal===`${s.start}-${s.end}`?'selected':''}>${s.label}</option>`).join('')}
-        <option value="off" ${selVal==='off'?'selected':''}>🔴 絶対に休み</option>
-      </select>
+      <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+        <select class="form-control" style="padding:2px 4px;font-size:12px;min-width:100px" data-shiftpref-start="${ds}">
+          <option value="" ${startVal===''?'selected':''}>— 休み扱い</option>
+          <option value="off" ${startVal==='off'?'selected':''}>🔴 絶対休み</option>
+          ${timeOpts(startVal,6,24)}
+        </select>
+        <select class="form-control" style="padding:2px 4px;font-size:12px;min-width:100px;display:${startVal&&startVal!=='off'?'inline-block':'none'}" data-shiftpref-end="${ds}">
+          ${timeOpts(endVal,6,30)}
+        </select>
+      </div>
     </td></tr>`;
   }).join('');
 
   const prefCard=`
   <div class="card" style="margin-top:14px">
     <div class="section-title" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">
-      <span><i class="ti ti-calendar-event"></i> シフト希望提出 <span class="tip" style="margin-left:4px">${nml}分 / 締切：今月20日まで</span></span>
+      <span><i class="ti ti-calendar-event"></i> シフト希望提出 <span class="tip" style="margin-left:4px">${nml}分 / 締切：今月${state.shiftDeadline||20}日まで</span></span>
       ${submitted?`<span class="chip" style="background:var(--bg-success);color:var(--text-success)"><i class="ti ti-check"></i> 提出済</span>`:
         deadlinePassed?`<span class="chip" style="background:var(--bg-danger);color:var(--text-danger)"><i class="ti ti-alert-triangle"></i> 期限超過</span>`:''}
     </div>
     ${submitted?`<p class="tip" style="margin-bottom:10px">提出済みです（${new Date(prefData.submittedAt).toLocaleDateString('ja-JP')}）。内容変更はシフト修正依頼からお願いします。</p>`:''}
-    <div class="kpi-table-wrap"><table class="att-list" style="max-width:340px">
-      <thead><tr><th style="width:30px">日</th><th style="width:22px">曜</th><th>シフト希望</th></tr></thead>
+    <div class="kpi-table-wrap"><table class="att-list" style="max-width:520px">
+      <thead><tr><th style="width:30px">日</th><th style="width:22px">曜</th><th>出勤時間 / 退勤時間</th></tr></thead>
       <tbody>${calRows}</tbody>
     </table></div>
     ${!submitted?`<div style="margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <button class="btn btn-primary" id="shiftpref-submit"><i class="ti ti-send"></i> ${nml}のシフト希望を提出する</button>
-      ${deadlinePassed?`<span class="tip" style="color:var(--text-warning)"><i class="ti ti-alert-triangle"></i> 締切（20日）を過ぎています</span>`:''}
+      ${deadlinePassed?`<span class="tip" style="color:var(--text-warning)"><i class="ti ti-alert-triangle"></i> 締切（${state.shiftDeadline||20}日）を過ぎています</span>`:''}
     </div>`:''}
   </div>`;
 
@@ -1304,9 +1325,12 @@ function shiftPrefCardHTML(si){
     <div class="section-title"><i class="ti ti-calendar-edit"></i> シフト修正依頼 <span class="tip" style="margin-left:4px">当月確定シフトの変更を管理者に依頼</span></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">
       <div><div class="form-label">対象日</div><input type="date" class="form-control" id="shiftchg-date" value="${REAL_Y}-${pad2(REAL_M+1)}-${pad2(REAL_D)}" style="max-width:160px"></div>
-      <div><div class="form-label">希望時間帯</div><select class="form-control" id="shiftchg-slot">
-        ${PREF_SLOTS.map(s=>`<option value="${s.start}|${s.end}|${s.code}">${s.label}</option>`).join('')}
-        <option value="off|off|休">🔴 休み希望</option>
+      <div><div class="form-label">出勤時間</div><select class="form-control" id="shiftchg-start" style="min-width:110px">
+        <option value="off">🔴 休み希望</option>
+        ${timeOpts('09:00',6,24)}
+      </select></div>
+      <div id="shiftchg-end-wrap"><div class="form-label">退勤時間</div><select class="form-control" id="shiftchg-end" style="min-width:110px">
+        ${timeOpts('18:00',6,30)}
       </select></div>
       <div style="flex:1;min-width:160px"><div class="form-label">理由</div><input type="text" class="form-control" id="shiftchg-reason" placeholder="例：家庭の都合"></div>
       <button class="btn btn-primary" id="shiftchg-submit"><i class="ti ti-send"></i> 依頼</button>
@@ -1461,30 +1485,58 @@ function bindAttendance(){
     if(!state.shiftPrefs)state.shiftPrefs={};
     if(!state.shiftPrefs[nmk])state.shiftPrefs[nmk]={};
     const days={};
-    document.querySelectorAll('[data-shiftpref-ds]').forEach(sel=>{
-      const ds=sel.dataset.shiftprefDs;
-      if(sel.value==='off')days[ds]=null; // 絶対休み
-      else if(sel.value){const[st,en]=sel.value.split('-');days[ds]={start:st,end:en};}
+    let valid=true;
+    document.querySelectorAll('[data-shiftpref-start]').forEach(startSel=>{
+      const ds=startSel.dataset.shiftprefStart;
+      const endSel=document.querySelector(`[data-shiftpref-end="${ds}"]`);
+      if(startSel.value==='off'){days[ds]=null;} // 絶対休み
+      else if(startSel.value){
+        if(!endSel||!endSel.value){valid=false;return;}
+        days[ds]={start:startSel.value,end:endSel.value};
+      }
       // 空欄は登録しない（休み扱い）
     });
+    if(!valid){toast('出勤希望の日は退勤時間も選択してください','error');return;}
     state.shiftPrefs[nmk][si]={submitted:true,submittedAt:Date.now(),days};
     toast(nextMonthLabel()+'のシフト希望を提出しました','success');render();
   };
+  // --- シフト希望：出勤時間変更→退勤プルダウン表示切替 ---
+  document.querySelectorAll('[data-shiftpref-start]').forEach(startSel=>{
+    const ds=startSel.dataset.shiftprefStart;
+    const endSel=document.querySelector(`[data-shiftpref-end="${ds}"]`);
+    if(!endSel)return;
+    startSel.onchange=()=>{endSel.style.display=startSel.value&&startSel.value!=='off'?'inline-block':'none';};
+  });
   // --- シフト修正依頼 ---
   const chgBtn=document.getElementById('shiftchg-submit');
   if(chgBtn)chgBtn.onclick=()=>{
     const date=document.getElementById('shiftchg-date').value;
-    const slotVal=document.getElementById('shiftchg-slot').value;
+    const chgStartEl=document.getElementById('shiftchg-start');
+    const chgEndEl=document.getElementById('shiftchg-end');
+    const chgStartVal=chgStartEl?chgStartEl.value:'';
+    const chgEndVal=chgEndEl?chgEndEl.value:'';
     const reason=(document.getElementById('shiftchg-reason').value||'').trim();
     if(!date){toast('対象日を入力してください','error');return;}
     if(!reason){toast('理由を入力してください','error');return;}
-    const[start,end,code]=slotVal.split('|');
+    const isOff=chgStartVal==='off';
+    if(!isOff&&!chgEndVal){toast('退勤時間を選択してください','error');return;}
+    const start=isOff?'off':chgStartVal;
+    const end=isOff?'off':chgEndVal;
+    const code=isOff?'休':'';
     const dup=(state.shiftChangeReqs||[]).find(r=>r.si===si&&r.date===date&&r.status==='pending');
     if(dup){toast('同じ日付の修正依頼がすでに承認待ちです','error');return;}
     if(!state.shiftChangeReqs)state.shiftChangeReqs=[];
     state.shiftChangeReqs.push({id:Date.now()+'_'+si,si,date,start,end,code,reason,status:'pending',by:null,createdAt:Date.now()});
     toast('シフト修正依頼を送信しました（承認待ち）','success');render();
   };
+  // --- シフト修正依頼：出勤時間変更→退勤プルダウン表示切替 ---
+  const chgStartSel=document.getElementById('shiftchg-start');
+  const chgEndWrap=document.getElementById('shiftchg-end-wrap');
+  if(chgStartSel&&chgEndWrap){
+    const toggleChgEnd=()=>{chgEndWrap.style.display=chgStartSel.value==='off'?'none':'';};
+    toggleChgEnd();
+    chgStartSel.onchange=toggleChgEnd;
+  }
 }
 
 /* ===== HISTORY（改修：Totalタブ追加） ===== */
@@ -2823,8 +2875,55 @@ function bindSummary(){
 }
 
 /* ===== ADMIN ===== */
+// 管理者向け対応タスク一覧を生成（件数が0になると自動的にパネルが消える）
+function adminTaskAlerts(){
+  const tasks=[];
+  const otP=(state.otRequests||[]).filter(r=>r.status==='pending').length;
+  const lvP=(state.leaveRequests||[]).filter(r=>r.status==='pending').length;
+  const chgP=(state.shiftChangeReqs||[]).filter(r=>r.status==='pending').length;
+  const pwU=STAFF_LIST.filter((_,si)=>mustChangePw(si)).length;
+  if(otP)tasks.push({lv:'danger',icon:'ti-clock-check',msg:`残業申請の承認待ちが <b>${otP}件</b> あります`,tab:'ot'});
+  if(lvP)tasks.push({lv:'danger',icon:'ti-calendar-heart',msg:`有給申請の承認待ちが <b>${lvP}件</b> あります`,tab:'leave'});
+  if(chgP)tasks.push({lv:'warn',icon:'ti-calendar-edit',msg:`シフト修正依頼の承認待ちが <b>${chgP}件</b> あります`,tab:'shift'});
+  if(pwU)tasks.push({lv:'warn',icon:'ti-key',msg:`今月パスワード未変更のスタッフが <b>${pwU}名</b> います`,tab:'staff'});
+  // 稼働開始後（_noSample=true）かつ当月5日以降のみ未入力チェック
+  if(state._noSample&&IS_CURRENT&&TODAY_D>=5){
+    const td=tData();
+    if(!Object.values(td).some(v=>v>0))
+      tasks.push({lv:'info',icon:'ti-clock-2',msg:'時間帯集計が今月まだ入力されていません',page:'timeslot'});
+    const kd=kData();
+    const hasKpi=Object.values(kd).some(sd=>sd&&Object.values(sd).some(dd=>dd&&Object.values(dd).some(v=>v>0)));
+    if(!hasKpi)
+      tasks.push({lv:'info',icon:'ti-chart-bar',msg:'KPIデータが今月まだ入力されていません',page:'kpi'});
+  }
+  return tasks;
+}
+function adminTaskPanel(){
+  const tasks=adminTaskAlerts();
+  if(!tasks.length)return '';
+  const clr={danger:{bg:'var(--bg-danger)',c:'var(--text-danger)'},warn:{bg:'var(--bg-warning)',c:'var(--text-warning)'},info:{bg:'#e3f2fd',c:'#1565c0'}};
+  const rows=tasks.map(t=>{
+    const col=clr[t.lv];
+    const nav=t.tab?`data-task-tab="${t.tab}"`:(t.page?`data-task-page="${t.page}"`:'');
+    return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);cursor:${nav?'pointer':'default'}" ${nav} ${nav?'class="task-alert-row"':''}>
+      <span style="flex-shrink:0;width:28px;height:28px;border-radius:50%;background:${col.bg};color:${col.c};display:flex;align-items:center;justify-content:center"><i class="ti ${t.icon}"></i></span>
+      <span style="flex:1;font-size:13px">${t.msg}</span>
+      ${nav?`<span style="font-size:11px;color:var(--text-tertiary);white-space:nowrap">タップして移動 →</span>`:''}
+    </div>`;
+  }).join('');
+  const dangerCnt=tasks.filter(t=>t.lv==='danger').length;
+  const badgeStyle=dangerCnt?'background:var(--bg-danger);color:var(--text-danger)':'background:var(--bg-warning);color:var(--text-warning)';
+  return `<div class="card" style="margin-bottom:14px;border-left:4px solid ${dangerCnt?'var(--danger)':'var(--warning)'}">
+    <div class="section-title" style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <i class="ti ti-checklist"></i> 対応が必要なタスク
+      <span class="chip" style="${badgeStyle}">${tasks.length}件</span>
+      <span class="tip" style="margin-left:auto;font-weight:400">対応完了すると自動的に消えます</span>
+    </div>
+    ${rows}
+  </div>`;
+}
 function adminPage(){
-  return `<div class="tabs">
+  return `${adminTaskPanel()}<div class="tabs">
     <div class="tab ${state.adminTab==='proxy'?'active':''}" data-atab="proxy"><i class="ti ti-user-check"></i> 代理打刻</div>
     <div class="tab ${state.adminTab==='correction'?'active':''}" data-atab="correction"><i class="ti ti-edit"></i> 打刻修正</div>
     <div class="tab ${state.adminTab==='leave'?'active':''}" data-atab="leave"><i class="ti ti-calendar"></i> 有給・欠勤</div>
@@ -3057,7 +3156,17 @@ function adminShift(){
     </table></div>
   </div>
   <div class="card" style="margin-top:14px">
-    <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px"><span><i class="ti ti-calendar-event"></i> ${nml}シフト希望一覧 <span class="tip" style="margin-left:4px">締切：今月20日。未提出者は${REAL_D>20?'<b style="color:#A32D2D">期限超過</b>':'今月20日まで'}</span></span><button class="btn btn-sm" id="shiftpref-notify" style="font-weight:400"><i class="ti ti-bell"></i> 未提出者に通知</button></div>
+    <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
+      <span><i class="ti ti-calendar-event"></i> ${nml}シフト希望一覧
+        <span class="tip" style="margin-left:4px">締切：今月${state.shiftDeadline||20}日。未提出者は${REAL_D>(state.shiftDeadline||20)?'<b style="color:#A32D2D">期限超過</b>':`今月${state.shiftDeadline||20}日まで`}</span>
+      </span>
+      <span style="display:flex;align-items:center;gap:8px">
+        <label style="font-size:12px;color:var(--text-secondary);white-space:nowrap">提出期限：毎月
+          <input type="number" id="shift-deadline-input" class="form-control" min="1" max="28" value="${state.shiftDeadline||20}" style="width:56px;display:inline-block;text-align:center;padding:2px 4px;font-size:13px;margin:0 2px">日
+        </label>
+        <button class="btn btn-sm" id="shiftpref-notify" style="font-weight:400"><i class="ti ti-bell"></i> 未提出者に通知</button>
+      </span>
+    </div>
     <div class="kpi-table-wrap"><table class="att-list" style="min-width:500px">
       <thead><tr><th>担当者</th><th>状態</th><th>提出日</th><th>出勤希望日数</th><th>絶対休み日数</th><th>詳細</th></tr></thead>
       <tbody>${prefRows}</tbody>
@@ -3130,6 +3239,9 @@ function adminPayroll(){
   </div>`;
 }
 function bindAdmin(){
+  // --- タスクアラート：タブ移動 / ページ移動 ---
+  document.querySelectorAll('[data-task-tab]').forEach(el=>{el.onclick=()=>{state.adminTab=el.dataset.taskTab;render();};});
+  document.querySelectorAll('[data-task-page]').forEach(el=>{el.onclick=()=>{state.page=el.dataset.taskPage;if(el.dataset.taskPage==='timeslot')state.tsStaff='total';render();};});
   document.querySelectorAll('[data-atab]').forEach(el=>{el.onclick=()=>{state.adminTab=el.dataset.atab;render();};});
   const ps=document.getElementById('proxy-staff');if(ps)ps.onchange=e=>{state.proxyStaff=parseInt(e.target.value);render();};
   const proxyPunch=(type)=>{
@@ -3230,6 +3342,13 @@ function bindAdmin(){
   // --- 残業承認 ---
   document.querySelectorAll('[data-ot-approve]').forEach(b=>{b.onclick=()=>{const r=state.otRequests[parseInt(b.dataset.otApprove)];if(r){r.status='approved';r.by='管理者';if(!state.otNotify)state.otNotify={};if(!state.otNotify[r.si])state.otNotify[r.si]=[];state.otNotify[r.si].push({date:r.date,hours:r.hours,status:'approved'});}toast('承認しました','success');render();};});
   document.querySelectorAll('[data-ot-reject]').forEach(b=>{b.onclick=()=>{const r=state.otRequests[parseInt(b.dataset.otReject)];if(r){r.status='rejected';r.by='管理者';if(!state.otNotify)state.otNotify={};if(!state.otNotify[r.si])state.otNotify[r.si]=[];state.otNotify[r.si].push({date:r.date,hours:r.hours,status:'rejected'});}toast('却下しました','info');render();};});
+  // --- シフト提出期限変更 ---
+  const deadlineInput=document.getElementById('shift-deadline-input');
+  if(deadlineInput)deadlineInput.onchange=()=>{
+    const v=parseInt(deadlineInput.value);
+    if(!v||v<1||v>28){toast('1〜28の範囲で入力してください','error');deadlineInput.value=state.shiftDeadline||20;return;}
+    state.shiftDeadline=v;saveState();toast(`シフト提出期限を毎月${v}日に変更しました`,'success');render();
+  };
   // --- シフト希望：未提出者に通知 ---
   const notifyBtn=document.getElementById('shiftpref-notify');
   if(notifyBtn)notifyBtn.onclick=()=>{
@@ -3269,7 +3388,8 @@ function bindAdmin(){
       const d=idx+1,ds=`${nmy}-${pad2(nmm)}-${pad2(d)}`;
       const dow=['日','月','火','水','木','金','土'][new Date(nmy,nmm-1,d).getDay()];
       const v=pd.days[ds];
-      const disp=v===null?'🔴 絶対休み':v?`${v.start}〜${v.end}`:'—（休み扱い）';
+      const endDisp=v&&v.end<v.start?'翌'+v.end:v&&v.end;
+      const disp=v===null?'🔴 絶対休み':v?`${v.start}〜${endDisp}`:'—（休み扱い）';
       return `<tr><td style="width:30px;text-align:center;font-family:var(--font-mono)">${d}</td><td style="width:22px;text-align:center">${dow}</td><td>${disp}</td></tr>`;
     }).join('');
     const box=document.getElementById('shiftpref-detail');

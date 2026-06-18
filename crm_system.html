@@ -221,7 +221,6 @@ function topBar(){
 function sidebar(){
   const items=[
     {id:'dashboard',icon:'ti-layout-dashboard',label:'ダッシュボード'},
-    {id:'customers',icon:'ti-building',label:'顧客リスト'},
     {id:'deals',icon:'ti-briefcase',label:'案件管理'},
     {id:'activities',icon:'ti-activity',label:'活動記録'},
     ...(isAdmin()?[{id:'admin',icon:'ti-shield',label:'管理者ビュー'}]:[]),
@@ -378,118 +377,6 @@ function dashboardPage(){
   </div>`;
 }
 
-/* ===== CUSTOMER LIST PAGE ===== */
-function customersPage(){
-  const si=isAdmin()?null:mySi();
-  let custs=state.customers.filter(c=>si===null||c.staffSi===si);
-  const f=state.custFilter;
-  if(f.status!=='all')custs=custs.filter(c=>c.status===f.status);
-  if(f.staff!=='all'&&isAdmin())custs=custs.filter(c=>c.staffSi===parseInt(f.staff));
-  if(f.q)custs=custs.filter(c=>(c.company+c.name+(c.phone||'')).toLowerCase().includes(f.q.toLowerCase()));
-  custs=[...custs].sort((a,b)=>b.createdAt-a.createdAt);
-
-  return `<div class="card">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <input type="text" class="form-control" id="cust-q" placeholder="社名・担当者・電話で検索" value="${esc(f.q)}" style="max-width:200px">
-        <select class="select" id="cust-filter-status">
-          <option value="all" ${f.status==='all'?'selected':''}>全ステータス</option>
-          ${CUST_STATUS.map(s=>`<option value="${s.id}" ${f.status===s.id?'selected':''}>${s.label}</option>`).join('')}
-        </select>
-        ${isAdmin()?`<select class="select" id="cust-filter-staff">
-          <option value="all" ${f.staff==='all'?'selected':''}>全担当者</option>
-          ${STAFF_LIST.map((s,i)=>`<option value="${i}" ${f.staff==i?'selected':''}>${esc(s)}</option>`).join('')}
-        </select>`:''}
-      </div>
-      <button class="btn btn-primary" id="cust-add-btn"><i class="ti ti-plus"></i> 顧客追加</button>
-    </div>
-    <div class="table-wrap"><table class="list">
-      <thead><tr><th>社名</th><th>担当者</th><th>電話</th><th>ステータス</th><th>担当営業</th><th>案件数</th><th>最終活動</th><th></th></tr></thead>
-      <tbody>${custs.length?custs.map(c=>{
-        const dealCnt=state.deals.filter(d=>d.customerId===c.id&&d.status==='open').length;
-        const lastAct=[...state.activities].filter(a=>a.customerId===c.id).sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
-        return `<tr>
-          <td><a href="#" data-cust="${c.id}" style="color:var(--accent);text-decoration:none;font-weight:600">${esc(c.company||c.name)}</a></td>
-          <td>${esc(c.name)}</td>
-          <td style="font-family:var(--font-mono);font-size:12px">${esc(c.phone||'')}</td>
-          <td>${statusChip(c.status)}</td>
-          <td>${esc(staffName(c.staffSi))}</td>
-          <td>${dealCnt?`<span style="font-weight:600;color:var(--accent)">${dealCnt}件</span>`:'—'}</td>
-          <td class="tip">${lastAct?lastAct.date:'—'}</td>
-          <td><button class="btn btn-sm" data-cust-edit="${c.id}"><i class="ti ti-edit"></i></button></td>
-        </tr>`;
-      }).join(''):`<tr><td colspan="8" style="text-align:center;padding:24px"><span class="tip">顧客が登録されていません</span></td></tr>`}
-      </tbody>
-    </table></div>
-  </div>`;
-}
-
-/* ===== CUSTOMER DETAIL PAGE ===== */
-function customerDetailPage(){
-  const c=state.customers.find(x=>x.id===state.selCustId);
-  if(!c)return `<div class="card"><button class="btn" id="back-to-custs"><i class="ti ti-arrow-left"></i> 一覧に戻る</button><p class="tip" style="margin-top:8px">顧客が見つかりません</p></div>`;
-  const myDeals=state.deals.filter(d=>d.customerId===c.id).sort((a,b)=>b.createdAt-a.createdAt);
-  const myActs=[...state.activities].filter(a=>a.customerId===c.id).sort((a,b)=>new Date(b.date)-new Date(a.date)||b.createdAt-a.createdAt);
-  const wonCount=myDeals.filter(d=>d.status==='won').reduce((s,d)=>s+(d.count||1),0);
-  const wonAmt=myDeals.filter(d=>d.status==='won').reduce((s,d)=>s+(d.amount||0),0);
-
-  return `
-  <div style="margin-bottom:12px"><button class="btn btn-sm" id="back-to-custs"><i class="ti ti-arrow-left"></i> 顧客一覧に戻る</button></div>
-  <div class="card">
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px">
-      <div>
-        <div style="font-size:20px;font-weight:800">${esc(c.company)}</div>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">
-          ${statusChip(c.status)}
-          <span class="tip">担当者：${esc(c.name)}</span>
-          <span class="tip">担当営業：${esc(staffName(c.staffSi))}</span>
-          <span class="tip">登録日：${fmt(c.createdAt)}</span>
-        </div>
-      </div>
-      <button class="btn btn-sm" data-cust-edit="${c.id}"><i class="ti ti-edit"></i> 編集</button>
-    </div>
-    <div class="grid-3" style="font-size:13px;gap:8px;margin-bottom:10px">
-      ${[['電話',c.phone],['メール',c.email],['業種',c.industry],['規模',c.size],['住所',c.address]].map(([l,v])=>`<div><div class="form-label">${l}</div><span>${esc(v)||'<span class="tip">—</span>'}</span></div>`).join('')}
-    </div>
-    ${c.note?`<div style="padding:8px 10px;background:var(--bg);border-radius:var(--radius);font-size:13px;color:var(--text-secondary)">${esc(c.note)}</div>`:''}
-    <div class="grid-2" style="margin-top:12px">
-      <div class="stat-card"><div class="stat-val" style="font-size:22px;color:var(--success)">${wonCount}件</div><div class="stat-label">累計成約件数</div></div>
-      ${isAdmin()?`<div class="stat-card"><div class="stat-val" style="font-size:18px">${wonAmt.toLocaleString()}円</div><div class="stat-label">累計成約金額</div></div>`:'<div></div>'}
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="section-title" style="justify-content:space-between">
-      <span><i class="ti ti-briefcase"></i> 案件（${myDeals.length}件）</span>
-      <button class="btn btn-sm btn-primary" id="deal-add-from-cust"><i class="ti ti-plus"></i> 案件追加</button>
-    </div>
-    ${myDeals.length?`<div class="table-wrap"><table class="list">
-      <thead><tr><th>案件名</th><th>フェーズ</th><th>件数</th>${isAdmin()?'<th>金額</th>':''}<th>確度</th><th>クロージング予定</th><th>状態</th><th></th></tr></thead>
-      <tbody>${myDeals.map(d=>`<tr>
-        <td style="font-weight:600">${esc(d.title)}${d.memo?`<div style="font-size:11px;color:var(--text-tertiary);margin-top:2px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.memo)}</div>`:''}</td>
-        <td>${phaseChip(d.phase)}</td>
-        <td>${d.count||1}件</td>
-        ${isAdmin()?`<td>${fmtAmt(d.amount)}</td>`:''}
-        <td>${d.probability||0}%</td>
-        <td>${d.expectedCloseDate||'—'}</td>
-        <td>${dealStatusChip(d.status)}</td>
-        <td>${d.link&&/^https?:\/\//.test(d.link)?`<a href="${esc(d.link)}" target="_blank" rel="noopener" class="btn btn-sm" title="${esc(d.link)}" style="margin-right:4px"><i class="ti ti-link"></i></a>`:''}<button class="btn btn-sm" data-deal-edit="${d.id}"><i class="ti ti-edit"></i></button></td>
-      </tr>`).join('')}</tbody>
-    </table></div>`:'<p class="tip">案件がありません</p>'}
-  </div>
-
-  <div class="card">
-    <div class="section-title" style="justify-content:space-between">
-      <span><i class="ti ti-activity"></i> アクティビティタイムライン（${myActs.length}件）</span>
-      <button class="btn btn-sm btn-primary" id="act-add-from-cust"><i class="ti ti-plus"></i> 活動記録</button>
-    </div>
-    ${myActs.length?`<ul class="timeline">${myActs.map(a=>`<li>
-      <div class="timeline-meta">${a.date} ${actChip(a.type)} <b>${esc(staffName(a.staffSi))}</b></div>
-      <div class="timeline-body">${esc(a.content)}</div>
-    </li>`).join('')}</ul>`:'<p class="tip">活動記録がありません</p>'}
-  </div>`;
-}
-
 /* ===== DEALS PAGE ===== */
 function dealsPage(){
   const si=isAdmin()?null:mySi();
@@ -505,7 +392,7 @@ function dealsPage(){
     const c=state.customers.find(x=>x.id===d.customerId);
     return `<tr>
       <td style="font-weight:600">${esc(d.title)}${d.memo?`<div style="font-size:11px;color:var(--text-tertiary);margin-top:2px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.memo)}</div>`:''}</td>
-      <td><a href="#" data-cust="${d.customerId}" style="color:var(--accent);text-decoration:none">${esc(c?c.company||c.name:'—')}</a></td>
+      <td>${esc(c?c.company||c.name:'—')}</td>
       <td>${phaseChip(d.phase)}</td>
       <td>${d.count||1}件</td>
       ${isAdmin()?`<td>${fmtAmt(d.amount)}</td>`:''}
@@ -607,7 +494,7 @@ function activitiesPage(){
         return `<tr>
           <td style="font-family:var(--font-mono);white-space:nowrap">${a.date}</td>
           <td>${actChip(a.type)}</td>
-          <td>${c?`<a href="#" data-cust="${c.id}" style="color:var(--accent);text-decoration:none">${esc(c.company||c.name)}</a>`:'<span class="tip">—</span>'}</td>
+          <td>${c?esc(c.company||c.name):'<span class="tip">—</span>'}</td>
           <td style="max-width:260px">${esc(a.content)}</td>
           ${isAdmin()?`<td>${esc(staffName(a.staffSi))}</td>`:''}
           <td><button class="btn btn-sm" data-act-del="${a.id}" style="color:var(--text-danger)"><i class="ti ti-trash"></i></button></td>
@@ -671,41 +558,6 @@ function adminPage(){
 }
 
 /* ===== MODALS ===== */
-function custModal(id=null){
-  const c=id?state.customers.find(x=>x.id===id)||{}:{};
-  const defSi=isAdmin()?(c.staffSi!=null?c.staffSi:0):mySi();
-  return `<div class="modal-overlay" id="cust-modal"><div class="modal">
-    <div class="modal-title">${id?'顧客情報を編集':'新規顧客登録'}</div>
-    <div class="form-row">
-      <div><div class="form-label">社名 <span style="color:var(--danger)">*</span></div><input class="form-control" id="cm-company" value="${esc(c.company||'')}"></div>
-      <div><div class="form-label">担当者名</div><input class="form-control" id="cm-name" value="${esc(c.name||'')}"></div>
-    </div>
-    <div class="form-row">
-      <div><div class="form-label">電話</div><input class="form-control" id="cm-phone" value="${esc(c.phone||'')}"></div>
-      <div><div class="form-label">メール</div><input class="form-control" id="cm-email" value="${esc(c.email||'')}"></div>
-    </div>
-    <div class="form-row">
-      <div><div class="form-label">業種</div><input class="form-control" id="cm-industry" value="${esc(c.industry||'')}"></div>
-      <div><div class="form-label">規模</div><input class="form-control" id="cm-size" placeholder="例：従業員50名" value="${esc(c.size||'')}"></div>
-    </div>
-    <div class="form-row">
-      <div style="flex:2"><div class="form-label">住所</div><input class="form-control" id="cm-address" value="${esc(c.address||'')}"></div>
-      <div><div class="form-label">ステータス</div><select class="select" id="cm-status" style="width:100%">
-        ${CUST_STATUS.map(s=>`<option value="${s.id}" ${(c.status||'lead')===s.id?'selected':''}>${s.label}</option>`).join('')}
-      </select></div>
-    </div>
-    ${isAdmin()?`<div style="margin-bottom:12px"><div class="form-label">担当営業</div><select class="select" id="cm-staff" style="width:100%">
-      ${STAFF_LIST.map((s,i)=>`<option value="${i}" ${defSi===i?'selected':''}>${esc(s)}</option>`).join('')}
-    </select></div>`:''}
-    <div style="margin-bottom:16px"><div class="form-label">メモ</div><textarea class="form-control" id="cm-note" rows="2">${esc(c.note||'')}</textarea></div>
-    <div style="display:flex;gap:8px;justify-content:flex-end">
-      ${id?`<button class="btn" style="color:var(--text-danger);margin-right:auto" id="cm-del"><i class="ti ti-trash"></i> 削除</button>`:''}
-      <button class="btn" id="cm-cancel">キャンセル</button>
-      <button class="btn btn-primary" id="cm-save">${id?'保存':'登録'}</button>
-    </div>
-  </div></div>`;
-}
-
 function dealModal(id=null,preCustId=null){
   const d=id?state.deals.find(x=>x.id===id)||{}:{};
   const custId=d.customerId||preCustId||'';
@@ -780,30 +632,6 @@ function actModal(id=null,preCustId=null){
 }
 
 /* ===== MODAL HANDLERS ===== */
-function showCustModal(id=null){
-  document.body.insertAdjacentHTML('beforeend',custModal(id));
-  const ov=document.getElementById('cust-modal');
-  ov.onclick=e=>{if(e.target===ov)ov.remove();};
-  document.getElementById('cm-cancel').onclick=()=>ov.remove();
-  const del=document.getElementById('cm-del');
-  if(del)del.onclick=()=>{
-    if(!confirm('この顧客と関連する案件・活動を全て削除しますか？'))return;
-    state.customers=state.customers.filter(c=>c.id!==id);
-    state.deals=state.deals.filter(d=>d.customerId!==id);
-    state.activities=state.activities.filter(a=>a.customerId!==id);
-    ov.remove();toast('顧客を削除しました','info');render();
-  };
-  document.getElementById('cm-save').onclick=()=>{
-    const company=(document.getElementById('cm-company').value||'').trim();
-    if(!company){toast('社名を入力してください','error');return;}
-    const staffSi=isAdmin()?parseInt(document.getElementById('cm-staff').value):mySi();
-    const data={company,name:(document.getElementById('cm-name').value||'').trim(),phone:(document.getElementById('cm-phone').value||'').trim(),email:(document.getElementById('cm-email').value||'').trim(),industry:(document.getElementById('cm-industry').value||'').trim(),size:(document.getElementById('cm-size').value||'').trim(),address:(document.getElementById('cm-address').value||'').trim(),status:document.getElementById('cm-status').value,note:(document.getElementById('cm-note').value||'').trim(),staffSi};
-    if(id){const idx=state.customers.findIndex(c=>c.id===id);if(idx>=0)state.customers[idx]={...state.customers[idx],...data};toast('顧客情報を更新しました');}
-    else{state.customers.push({id:genId(),createdAt:Date.now(),...data});toast('顧客を登録しました');}
-    ov.remove();render();
-  };
-}
-
 function showDealModal(id=null,preCustId=null){
   document.body.insertAdjacentHTML('beforeend',dealModal(id,preCustId));
   const ov=document.getElementById('deal-modal');
@@ -870,7 +698,7 @@ function render(){
     </div>`;
     return;
   }
-  const pages={dashboard:dashboardPage,customers:customersPage,customerDetail:customerDetailPage,deals:dealsPage,activities:activitiesPage,admin:adminPage};
+  const pages={dashboard:dashboardPage,deals:dealsPage,activities:activitiesPage,admin:adminPage};
   const content=(pages[state.page]||dashboardPage)();
   app.innerHTML=`<div class="layout">${topBar()}${sidebar()}<div class="content">${content}</div></div>`;
   bindPage();
@@ -906,29 +734,16 @@ function bindPage(){
   if(lo)lo.onclick=()=>{state.role=null;state.user=null;state.page='login';render();};
   // ナビ
   document.querySelectorAll('[data-nav]').forEach(el=>{el.onclick=()=>{state.page=el.dataset.nav;render();};});
-  // 顧客リンク（詳細ページへ）
-  document.querySelectorAll('[data-cust]').forEach(el=>{el.onclick=e=>{e.preventDefault();state.selCustId=el.dataset.cust;state.page='customerDetail';render();};});
-  // 戻る
-  const back=document.getElementById('back-to-custs');
-  if(back)back.onclick=()=>{state.page='customers';render();};
-  // フィルター
-  const cq=document.getElementById('cust-q');if(cq)cq.oninput=()=>{state.custFilter.q=cq.value;render();};
-  const cfs=document.getElementById('cust-filter-status');if(cfs)cfs.onchange=()=>{state.custFilter.status=cfs.value;render();};
-  const cfst=document.getElementById('cust-filter-staff');if(cfst)cfst.onchange=()=>{state.custFilter.staff=cfst.value;render();};
   const dfp=document.getElementById('deal-filter-phase');if(dfp)dfp.onchange=()=>{state.dealFilter.phase=dfp.value;render();};
   const dfst=document.getElementById('deal-filter-staff');if(dfst)dfst.onchange=()=>{state.dealFilter.staff=dfst.value;render();};
   const dfstt=document.getElementById('deal-filter-status');if(dfstt)dfstt.onchange=()=>{state.dealFilter.statusF=dfstt.value;render();};
   const aftp=document.getElementById('act-filter-type');if(aftp)aftp.onchange=()=>{state.actFilter.type=aftp.value;render();};
   const afst=document.getElementById('act-filter-staff');if(afst)afst.onchange=()=>{state.actFilter.staff=afst.value;render();};
   // 追加ボタン
-  const cAdd=document.getElementById('cust-add-btn');if(cAdd)cAdd.onclick=()=>showCustModal();
   const dAdd=document.getElementById('deal-add-btn');if(dAdd)dAdd.onclick=()=>showDealModal();
   const aAdd=document.getElementById('act-add-btn');if(aAdd)aAdd.onclick=()=>showActModal();
   const acsv=document.getElementById('act-csv-btn');if(acsv)acsv.onclick=exportActivityCSV;
-  const dfc=document.getElementById('deal-add-from-cust');if(dfc)dfc.onclick=()=>showDealModal(null,state.selCustId);
-  const afc=document.getElementById('act-add-from-cust');if(afc)afc.onclick=()=>showActModal(null,state.selCustId);
   // 編集ボタン
-  document.querySelectorAll('[data-cust-edit]').forEach(b=>{b.onclick=e=>{e.stopPropagation();showCustModal(b.dataset.custEdit);};});
   document.querySelectorAll('[data-deal-edit]').forEach(b=>{b.onclick=e=>{e.stopPropagation();showDealModal(b.dataset.dealEdit);};});
   // 活動削除
   document.querySelectorAll('[data-act-del]').forEach(b=>{b.onclick=()=>{

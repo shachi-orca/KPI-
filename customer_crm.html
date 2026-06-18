@@ -443,8 +443,10 @@ function detailHTML(){
           <div style="font-size:11px;font-weight:700;color:var(--text-3);letter-spacing:.5px;margin-bottom:8px"><i class="ti ti-calendar-event" style="font-size:13px"></i> 次回アポイント</div>
           ${apoActive?`<div style="background:${apoBg};border:${apoBorderStyle};border-radius:10px;padding:12px 14px">
             ${apoIn20?`<div style="font-size:12px;font-weight:800;color:#DC2626;margin-bottom:5px">⚡ まもなくアポイント（あと${apoMin}分）</div>`:''}
-            <div style="font-size:18px;font-weight:800;color:${apoColor};letter-spacing:-.3px">${fmtDT(apo.at)}</div>
-            ${apo.note?`<div style="font-size:13px;color:var(--text-2);margin-top:4px">${esc(apo.note)}</div>`:''}
+            <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+              <div style="font-size:18px;font-weight:800;color:${apoColor};letter-spacing:-.3px">${fmtDT(apo.at)}</div>
+              ${apo.note?`<div style="font-size:13px;color:var(--text-2);font-weight:500">${esc(apo.note)}</div>`:''}
+            </div>
             <div style="font-size:12px;color:var(--text-3);margin-top:5px">担当: ${esc(staffName(apo.si)||'')}</div>
           </div>`:'<div style="font-size:13px;color:var(--text-3)">設定なし</div>'}
         </div>

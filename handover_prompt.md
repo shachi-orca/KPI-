@@ -13,113 +13,43 @@
 | `kpi_system.html` | 目標の複数月トレンドグラフ | 未着手 |
 | `kpi_system.html` | ファネル下流の0偏り / 期間ナビの年範囲ハードコード | 見送り中 |
 | `kpi_system.html` | パスワードの平文保存 | 管理者確認要件で見送り中 |
-| `customer_crm.html` | デザイン全面刷新（ユーザーが画像を用意中） | 次セッション予定 |
 
 ---
 
 ## 今セッション（2026-06-18）で完了した実装
 
-### CRMボタン追加（`kpi_system.html`）✅
-- topbarに「CRM」ボタンを追加。**スタッフ・管理者ともに表示**（KGIボタンは管理者のみのまま）
-- リンク先: `customer_crm.html`
+### CRMデザイン全面刷新（`customer_crm.html`）✅
+- CSS全面刷新：コントラスト強化・余白拡大・フォーカスリング・タイポグラフィ改善
+- ポータルカード：季節グラデーション＋ボーダー・月数字54px
+- 顧客一覧：件数バッジ追加・行高さ拡大
+- 顧客詳細：ステータスをヘッダー右端に・電話番号太字強調
+- 対応フォーム：保存ボタンflex幅最大化・テキストエリア4行
+- タイムライン：担当者太字・種別サブテキスト分離
 
-### 顧客管理CRM 新規作成（`customer_crm.html`）✅
+### 次回アポイント設定（`customer_crm.html`）✅
+- 顧客詳細の左カード上部（顧客名の直下）に次回アポを表示
+- 日時とメモを横並び表示
+- 20分以内は⚡赤枠で強調表示
+- アポ設定パネル（日時・担当者・メモ）→ 設定/更新/削除ボタン
 
-**ファイル概要**
-- 完全新規の顧客管理システム（822行）
-- フレームワーク不使用・バニラJS + Tabler Icons
-- LocalStorageキー: `crmCustomerState_v1`
-- セッション: `sessionStorage`（タブを閉じると消える・KGIの自動同期なし）
-
-**データ構造**
-```js
-D = {
-  products:    [{id, name}],                   // 商材マスタ
-  assignments: [{id, si, year, month, pid}],   // 担当割り当て（ポータルカード元データ）
-  customers:   [{id, name, company, role, tel, tel2, email,
-                 postalCode, address, status, tags, ctx[], createdAt}],
-  contacts:    [{id, cid, si, pid, year, month, at,
-                 method, reason, manager, content}],
-  _cid, _hid  // 採番カウンタ
-}
-```
-
-**定数**
-```js
-ROLES    = ['代表取締役','取締役','部長','課長','係長','担当者','一般','その他']
-METHODS  = ['アウトバウンド','インバウンド','メール対応','OLS','対面','その他']
-REASONS  = ['折返し連絡','クレーム対応','新規提案','その他']
-STATUSES = ['未対応','優先対応','対応中','完了']
-```
-
-**ステータス色**
-| ステータス | CSSクラス | 色 |
-|---|---|---|
-| 未対応 | `.bd` | 赤 |
-| 優先対応 | `.bp` | オレンジ枠 |
-| 対応中 | `.bw` | 黄 |
-| 完了 | `.bs` | 緑 |
-
-**画面構成（横タブナビ）**
-
-| 画面 | pg値 | 概要 |
-|---|---|---|
-| CRM ポータル | `portal` | 担当割り当てを季節カードで表示。カードクリック → 顧客一覧へ |
-| 顧客一覧 | `customers` | 検索・ステータスフィルタ・新規登録。ポータルカード文脈で絞り込み |
-| 顧客詳細 | `detail` | 左：顧客情報カード。右：対応入力フォーム＋履歴タイムライン |
-| 設定（管理者のみ） | `settings` | 商材管理・担当割り当て・データ管理の3タブ |
-
-**顧客詳細ページ — 対応履歴入力フォーム構成**
-```
-日時
-担当者 ｜ 責任者（テキスト入力）
-対応方法（プルダウン）｜ 対応理由（プルダウン）
-商材（プルダウン）
-対応内容（textarea）
-対応ステータス ← 保存時に顧客のステータスへ反映
-[保存] [キャンセル]
-[確認バー: この内容で保存しますか？ / 確定する / 戻る]
-```
-
-**重要な設計ルール（customer_crm.html）**
-- `render()` → `bind()` の流れで毎回全画面再描画
-- 保存確認はインラインバー（`confirm()` 不使用）
-- 顧客カードのステータスは **バッジ表示のみ**。対応履歴入力の「対応ステータス」選択で自動更新
-- 郵便番号 → 住所自動補完は `zipcloud.ibsnet.co.jp` API（async/await）
-- スタッフはポータルカード経由でのみ顧客一覧に到達（`ui.ctx` に文脈が入る）
-- 管理者はすべての顧客を閲覧・編集可能
-
-**主要関数**
-```js
-render()          // セッション確認 → login/app HTML を描画 → bind()
-portalHTML()      // 季節カードグリッド（staff: 自分のみ / admin: 全員）
-customersHTML()   // 顧客一覧（ui.ctx でポータル文脈フィルタ）
-detailHTML()      // 顧客詳細＋対応入力フォーム＋タイムライン
-settingsHTML()    // 設定（productsTab / assignTab / exportTab）
-saveContact()     // cc-okボタン（確認後）から呼ばれる。contactStatus で顧客status更新
-saveCust()        // 顧客新規登録・編集（modal経由）
-lookupZip()       // 郵便番号 → zipcloud API → 住所フィールド自動補完（async）
-expJSON(name,d)   // JSONエクスポート
-expCSV()          // 顧客一覧CSVエクスポート（BOM付き・Excelで開ける）
-```
-
----
-
-## あなたへの指示
-
-このプロジェクトは **コールセンター・営業KPI管理システム + 顧客管理CRM** の開発です。
-既存ファイルを引き継いで開発を継続してください。
+### 20分前アラートバナー（全3ファイル共通）✅
+- KPI/KGI/CRM どのページにいても画面最上部に赤バナーが固定表示（z-index:10000）
+- スタッフは自分担当のアポのみ・管理者は全件表示
+- 「詳細を見る」→ `customer_crm.html?cid={id}` で顧客詳細に直接ジャンプ
+- ID数字部分をクリックでクリップボードにコピー（白フラッシュでフィードバック）
+- 「閉じる」で sessionStorage に記録（タブ閉じると再表示）
+- 30秒ごとにチェック（setInterval）
 
 ---
 
 ## プロジェクト概要
 
-### ファイル構成
+### ファイル構成・行数
 
 ```
-kpi_system.html     （KPI・シフト・勤怠管理。LocalStorageキー: kpiSystemState_v2）
+kpi_system.html     （KPI・シフト・勤怠管理。LocalStorageキー: kpiSystemState_v2）約3896行
 crm_system.html     （KGI管理システム。LocalStorageキー: crmSystemState_v1）
-customer_crm.html   （顧客管理CRM。LocalStorageキー: crmCustomerState_v1）
+customer_crm.html   （顧客管理CRM。LocalStorageキー: crmCustomerState_v1）約946行
 ```
 
 ### KPI ↔ KGI(crm_system.html) の共有設計
@@ -132,16 +62,124 @@ customer_crm.html   （顧客管理CRM。LocalStorageキー: crmCustomerState_v1
 - `customer_crm.html` は `kpiSystemState_v2` を認証のみに使用（スタッフリスト・パスワード参照）
 - セッション自動同期なし。KPIにログイン済みでも **CRMへの再ログインが必要**
 - KPIのスタッフ/管理者パスワードをそのまま使って認証
+- `?cid={id}` クエリパラメータで顧客詳細に直接遷移（起動時・ログイン後両対応）
 
 ### kpi_system.html 基本設計
 
-- フレームワーク不使用・バニラJS + Chart.js + Tabler Icons（現在 **約3825行**）
+- フレームワーク不使用・バニラJS + Chart.js + Tabler Icons（現在 **約3896行**）
 - 全データはメモリ上の `state` オブジェクトで管理（LocalStorageに永続化）
 - 個別認証：スタッフ別パスワード 初期 `kpi@1234`（初回・月初ログイン時に変更必須）／管理者 `admin@1234`
 
 ### 対象ユーザー
 - スタッフ10名のコールセンター・営業チーム
 - 担当者ロール / 管理者ロールの2種類
+
+---
+
+## customer_crm.html 設計詳細
+
+### データ構造
+```js
+D = {
+  products:     [{id, name}],
+  assignments:  [{id, si, year, month, pid}],
+  customers:    [{id, name, company, role, tel, tel2, email,
+                  postalCode, address, status, tags, ctx[], createdAt}],
+  contacts:     [{id, cid, si, pid, year, month, at,
+                  method, reason, manager, content}],
+  appointments: [{id, cid, si, at, note}],   // 次回アポイント（顧客1件につき最大1件）
+  _cid, _hid, _aid  // 採番カウンタ
+}
+```
+
+### 定数
+```js
+ROLES    = ['代表取締役','取締役','部長','課長','係長','担当者','一般','その他']
+METHODS  = ['アウトバウンド','インバウンド','メール対応','OLS','対面','その他']
+REASONS  = ['折返し連絡','クレーム対応','新規提案','その他']
+STATUSES = ['未対応','優先対応','対応中','完了']
+```
+
+### ステータス色
+| ステータス | CSSクラス | 色 |
+|---|---|---|
+| 未対応 | `.bd` | 赤 |
+| 優先対応 | `.bp` | オレンジ枠 |
+| 対応中 | `.bw` | 黄 |
+| 完了 | `.bs` | 緑 |
+
+### 画面構成（横タブナビ）
+
+| 画面 | pg値 | 概要 |
+|---|---|---|
+| CRM ポータル | `portal` | 担当割り当てを季節カードで表示。カードクリック → 顧客一覧へ |
+| 顧客一覧 | `customers` | 検索・ステータスフィルタ・新規登録。ポータルカード文脈で絞り込み |
+| 顧客詳細 | `detail` | 左：次回アポ→顧客情報→アポ設定パネル。右：対応入力フォーム＋履歴タイムライン |
+| 設定（管理者のみ） | `settings` | 商材管理・担当割り当て・データ管理の3タブ |
+
+### 顧客詳細ページ — 左カラム構成
+```
+[顧客名]
+───────────────────────────
+次回アポイント
+  [日時]  [メモ]（横並び）
+  担当: ○○
+───────────────────────────
+ID / 会社名 / 役職 / 電話番号 / メール / タグ / 最新対応日
+───────────────────────────
+アポイント設定パネル
+  日時 / 担当者 / メモ
+  [設定する] [削除]
+```
+
+### 重要な設計ルール（customer_crm.html）
+- `render()` → `bind()` の流れで毎回全画面再描画
+- 保存確認はインラインバー（`confirm()` 不使用）
+- 顧客カードのステータスは **ヘッダー右端にバッジ表示**。対応履歴入力の「対応ステータス」選択で自動更新
+- 郵便番号 → 住所自動補完は `zipcloud.ibsnet.co.jp` API（async/await）
+- スタッフはポータルカード経由でのみ顧客一覧に到達（`ui.ctx` に文脈が入る）
+- 管理者はすべての顧客を閲覧・編集可能
+- アポイントは顧客1件につき最大1件（上書き方式）
+
+### 主要関数
+```js
+render()          // セッション確認 → login/app HTML を描画 → bind()
+portalHTML()      // 季節カードグリッド（staff: 自分のみ / admin: 全員）
+customersHTML()   // 顧客一覧（ui.ctx でポータル文脈フィルタ）
+detailHTML()      // 顧客詳細＋アポ表示＋対応入力フォーム＋タイムライン
+settingsHTML()    // 設定（productsTab / assignTab / exportTab）
+saveContact()     // cc-okボタン（確認後）から呼ばれる。contactStatus で顧客status更新
+saveCust()        // 顧客新規登録・編集（modal経由）
+saveApo()         // アポイント設定・更新（顧客1件につき1件・上書き）
+deleteApo()       // アポイント削除
+lookupZip()       // 郵便番号 → zipcloud API → 住所フィールド自動補完（async）
+expJSON(name,d)   // JSONエクスポート
+expCSV()          // 顧客一覧CSVエクスポート（BOM付き・Excelで開ける）
+apoWatchdog IIFE  // 全3ファイル末尾に共通。30秒ごとにアポを監視しバナー表示
+```
+
+---
+
+## アポイントアラート仕様（全3ファイル共通）
+
+```
+定数:
+  CRM_KEY = 'crmCustomerState_v1'
+  DIS_KEY = '_apoDismissed'（sessionStorage）
+  BID     = '_apoBanner'（DOM要素ID）
+  TWENTY  = 20分（ms）
+
+表示条件:
+  - アポ時刻の20分前 〜 1分経過後まで表示
+  - sessionStorage[DIS_KEY] に含まれるIDは除外
+  - staff: a.si === sess.user のもののみ
+  - admin: 全件
+
+getUser() 優先順位:
+  1. sessionStorage['crmCustomerSession_v1']（CRMセッション）
+  2. インメモリ state.role / state.user（KPI/KGI ページ）
+  3. localStorage['kpiSystemState_v2']（フォールバック）
+```
 
 ---
 
@@ -205,3 +243,8 @@ state = {
 - `state.activeStaff` は `'total'` になる場合があるため `parseInt()` 不可
 - 率指標は必ず **Math.min(100, ...)** で100%クランプ
 - **横長テーブルは `.kpi-table-wrap`（overflow:auto）で包む**
+
+## あなたへの指示
+
+このプロジェクトは **コールセンター・営業KPI管理システム + 顧客管理CRM** の開発です。
+既存ファイルを引き継いで開発を継続してください。

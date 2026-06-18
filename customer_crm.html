@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CRM — 顧客管理</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<style>
+:root{
+  --accent:#2563EB;--accent-hover:#1d4ed8;
+  --bg:#eef4fb;--card:#fff;--border:#dde3ec;
+  --text:#1a1a2e;--text-2:#5a6172;--text-3:#9aa2b0;
+  --r:8px;--r-md:12px;--shadow:0 1px 4px rgba(0,0,0,.08);--shadow-md:0 4px 16px rgba(0,0,0,.10);
+  --danger:#DC2626;--bg-danger:#FEF2F2;--text-danger:#991B1B;
+  --warning:#D97706;--bg-warning:#FFFBEB;--text-warning:#92400E;
+  --success:#16A34A;--bg-success:#F0FDF4;--text-success:#166534;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5;min-height:100vh;}
+#app{min-height:100vh;}
+
+/* ── Login ── */
+.login-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;}
+.login-card{background:var(--card);border-radius:var(--r-md);padding:36px 32px;width:100%;max-width:380px;box-shadow:var(--shadow-md);}
+.login-logo{font-size:20px;font-weight:800;color:var(--accent);margin-bottom:6px;display:flex;align-items:center;gap:8px;}
+.login-sub{font-size:13px;color:var(--text-2);margin-bottom:22px;}
+.login-notice{background:var(--bg-warning);color:var(--text-warning);border-radius:var(--r);padding:8px 12px;font-size:12px;margin-bottom:16px;display:flex;align-items:center;gap:6px;}
+
+/* ── Top nav ── */
+.topnav{background:var(--card);border-bottom:1px solid var(--border);display:flex;align-items:stretch;padding:0 20px;height:50px;position:sticky;top:0;z-index:100;gap:2px;}
+.topnav-tab{display:flex;align-items:center;gap:6px;padding:0 14px;font-size:14px;font-weight:500;color:var(--text-2);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s;text-decoration:none;user-select:none;white-space:nowrap;}
+.topnav-tab:hover{color:var(--text);}
+.topnav-tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600;}
+.topnav-tab i{font-size:16px;}
+.topnav-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+.tnbadge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;}
+.tnbadge-admin{background:var(--bg-warning);color:var(--text-warning);}
+.tnbadge-staff{background:var(--bg-success);color:var(--text-success);}
+
+/* ── Portal ── */
+.portal-bg{background:linear-gradient(150deg,#fce4ec 0%,#e8f4ff 55%,#f0f0ff 100%);min-height:calc(100vh - 50px);padding:24px;}
+.portal-inner{max-width:1200px;margin:0 auto;}
+.portal-header{display:flex;align-items:center;gap:10px;margin-bottom:20px;}
+.portal-title{font-size:22px;font-weight:800;}
+.portal-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+.s-card{border-radius:14px;padding:16px 14px;position:relative;overflow:hidden;cursor:pointer;transition:transform .15s,box-shadow .15s;display:flex;flex-direction:column;min-height:190px;box-shadow:0 2px 8px rgba(0,0,0,.08);}
+.s-card:hover{transform:translateY(-3px);box-shadow:0 6px 20px rgba(0,0,0,.12);}
+.s-card-tag{font-size:11px;font-weight:600;opacity:.65;margin-bottom:6px;}
+.s-card-deco{position:absolute;top:10px;right:12px;font-size:30px;opacity:.55;}
+.s-card-year{font-size:12px;opacity:.65;}
+.s-card-month{font-size:44px;font-weight:800;line-height:1;margin:1px 0;}
+.s-card-prod{font-size:14px;font-weight:600;margin-top:4px;opacity:.85;}
+.s-card-staff{font-size:11px;opacity:.5;margin-top:2px;}
+.s-card-footer{margin-top:auto;padding-top:12px;}
+.s-card-btn{width:100%;padding:6px 0;border-radius:20px;font-size:12px;font-weight:600;border:1.5px solid rgba(0,0,0,.15);background:rgba(255,255,255,.55);cursor:pointer;transition:background .15s;}
+.s-card-btn:hover{background:rgba(255,255,255,.8);}
+.portal-empty{text-align:center;padding:70px 20px;color:var(--text-3);}
+.portal-empty i{font-size:52px;opacity:.25;display:block;margin-bottom:10px;}
+
+/* ── Page content ── */
+.page{padding:22px;max-width:1200px;margin:0 auto;}
+
+/* ── Crumb ── */
+.crumb{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2);margin-bottom:14px;}
+.crumb-link{color:var(--accent);cursor:pointer;}
+.crumb-link:hover{text-decoration:underline;}
+
+/* ── List ── */
+.list-head{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
+.list-title{font-size:20px;font-weight:800;}
+.list-tools{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap;}
+.search-wrap{display:flex;align-items:center;border:1px solid var(--border);border-radius:var(--r);background:var(--card);overflow:hidden;}
+.search-wrap i{padding:0 8px;color:var(--text-3);font-size:16px;}
+.search-wrap input{border:none;outline:none;padding:7px 8px;font-size:13px;background:transparent;width:200px;}
+.table-wrap{overflow-x:auto;border-radius:var(--r-md);box-shadow:var(--shadow);}
+table.t{width:100%;border-collapse:collapse;font-size:13px;background:var(--card);}
+table.t th{background:#f4f7fb;padding:10px 14px;text-align:left;font-weight:600;font-size:12px;color:var(--text-2);border-bottom:1px solid var(--border);}
+table.t td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}
+table.t tr:last-child td{border-bottom:none;}
+table.t tr:hover td{background:#f8faff;}
+
+/* ── Detail ── */
+.detail-head{display:flex;align-items:center;margin-bottom:16px;}
+.detail-title{font-size:20px;font-weight:800;}
+.detail-grid{display:grid;grid-template-columns:1fr 1.3fr;gap:16px;align-items:start;}
+.cust-card{background:var(--card);border-radius:var(--r-md);padding:20px;box-shadow:var(--shadow);}
+.avatar{width:52px;height:52px;border-radius:50%;background:#eff6ff;display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--accent);margin-bottom:10px;}
+.cust-name{font-size:18px;font-weight:800;margin-bottom:4px;}
+.cust-label{font-size:11px;color:var(--text-2);font-weight:500;margin-bottom:10px;}
+.irow{display:flex;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px;align-items:center;}
+.irow:last-child{border-bottom:none;}
+.ikey{width:100px;flex-shrink:0;color:var(--text-2);font-weight:500;}
+.ival{flex:1;word-break:break-all;display:flex;align-items:center;gap:4px;}
+.cpbtn{background:none;border:none;cursor:pointer;color:var(--text-3);padding:2px;border-radius:3px;font-size:13px;}
+.cpbtn:hover{color:var(--accent);}
+.tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:#eff6ff;color:var(--accent);margin:1px;}
+
+.panel{background:var(--card);border-radius:var(--r-md);padding:16px;box-shadow:var(--shadow);margin-bottom:14px;}
+.panel-title{font-size:14px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:6px;}
+.h-tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:14px;}
+.h-tab{padding:4px 10px;border-radius:20px;font-size:12px;cursor:pointer;border:1px solid var(--border);background:var(--card);color:var(--text-2);transition:all .15s;}
+.h-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+.timeline{list-style:none;padding-left:26px;position:relative;}
+.timeline::before{content:'';position:absolute;left:8px;top:0;bottom:0;width:2px;background:var(--border);}
+.tl-item{position:relative;margin-bottom:14px;}
+.tl-icon{position:absolute;left:-22px;top:8px;width:14px;height:14px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;}
+.tl-icon i{font-size:8px;color:#fff;}
+.tl-meta{font-size:12px;color:var(--text-2);margin-bottom:3px;}
+.tl-body{background:var(--bg);border-radius:var(--r);padding:8px 12px;font-size:13px;}
+.tl-empty{text-align:center;padding:28px 0;color:var(--text-3);font-size:13px;}
+
+/* ── Settings ── */
+.stabs{display:flex;gap:2px;margin-bottom:16px;border-bottom:1px solid var(--border);}
+.stab{padding:8px 14px;font-size:13px;font-weight:500;color:var(--text-2);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;}
+.stab.active{color:var(--accent);border-bottom-color:var(--accent);}
+
+/* ── Common ── */
+.card{background:var(--card);border-radius:var(--r-md);padding:16px;box-shadow:var(--shadow);margin-bottom:14px;}
+.sec-title{font-weight:700;font-size:14px;margin-bottom:12px;display:flex;align-items:center;gap:6px;}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:var(--r);border:1px solid var(--border);background:var(--card);cursor:pointer;font-size:13px;font-weight:500;transition:all .15s;white-space:nowrap;}
+.btn:hover{background:var(--bg);}
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent);}
+.btn-primary:hover{background:var(--accent-hover);}
+.btn-danger{background:var(--danger);color:#fff;border-color:var(--danger);}
+.btn-danger:hover{opacity:.85;}
+.btn-sm{padding:4px 10px;font-size:12px;}
+.btn-ghost{background:transparent;border-color:transparent;color:var(--text-2);}
+.btn-ghost:hover{background:var(--bg);}
+.btn:disabled{opacity:.4;cursor:default;pointer-events:none;}
+.fc{width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;background:var(--card);color:var(--text);outline:none;}
+.fc:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(37,99,235,.12);}
+textarea.fc{resize:vertical;min-height:76px;}
+.fl{font-size:12px;color:var(--text-2);margin-bottom:4px;font-weight:500;display:block;}
+.sel{padding:7px 10px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;background:var(--card);color:var(--text);cursor:pointer;outline:none;}
+.sel:focus{border-color:var(--accent);}
+.w-full{width:100%;}
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;}
+.fg{margin-bottom:10px;}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;}
+.bd{background:var(--bg-danger);color:var(--text-danger);}
+.bw{background:var(--bg-warning);color:var(--text-warning);}
+.bs{background:var(--bg-success);color:var(--text-success);}
+.bp{background:#FFF3E0;color:#C45200;border:1px solid #FFB74D;}
+.tip{font-size:12px;color:var(--text-3);}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:#1a1a2e;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;z-index:9999;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+.toast-error{background:#A32D2D;}.toast-warn{background:#B45309;}.toast-ok{background:#15803D;}
+.modal-ov{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px;}
+.modal{background:var(--card);border-radius:var(--r-md);padding:24px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.18);}
+.modal-title{font-size:16px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+.mfooter{display:flex;justify-content:flex-end;gap:8px;margin-top:18px;}
+.storage-bar{height:8px;background:var(--border);border-radius:4px;overflow:hidden;max-width:320px;margin-top:6px;}
+.storage-fill{height:100%;border-radius:4px;transition:width .5s;}
+
+@media(max-width:900px){.portal-grid{grid-template-columns:repeat(2,1fr);}.detail-grid{grid-template-columns:1fr;}.frow{grid-template-columns:1fr;}}
+@media(max-width:600px){.portal-grid{grid-template-columns:1fr 1fr;}.portal-bg{padding:14px;}.page{padding:14px;}.search-wrap input{width:140px;}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="toast" id="toast"></div>
+<script>
+'use strict';
+const CRM_KEY='crmCustomerState_v1',SESSION_KEY='crmCustomerSession_v1',KPI_KEY='kpiSystemState_v2';
+const WARN_BYTES=4*1024*1024;
+const ROLES=['代表取締役','取締役','部長','課長','係長','担当者','一般','その他'];
+const METHODS=['アウトバウンド','インバウンド','メール対応','OLS','対面','その他'];
+const REASONS=['折返し連絡','クレーム対応','新規提案','その他'];
+const STATUSES=['未対応','優先対応','対応中','完了'];
+const METHOD_ICONS={'アウトバウンド':'ti-phone-outgoing','インバウンド':'ti-phone-incoming','メール対応':'ti-mail','OLS':'ti-device-laptop','対面':'ti-users','その他':'ti-message'};
+const REASON_ICONS={'折返し連絡':'ti-phone-call','クレーム対応':'ti-alert-circle','新規提案':'ti-bulb','その他':'ti-message'};
+
+function season(m){
+  if([3,4,5].includes(m)) return{label:'春',bg:'#FFF0F3',fg:'#9B2335',deco:'🌸'};
+  if([6,7,8].includes(m)) return{label:'夏',bg:'#EFF8FF',fg:'#1558b0',deco:'🌿'};
+  if([9,10,11].includes(m)) return{label:'秋',bg:'#FFF7ED',fg:'#92400E',deco:'🍂'};
+  return{label:'冬',bg:'#F0F4FF',fg:'#3730a3',deco:'❄️'};
+}
+
+// ── Session ──
+function lsess(){try{return JSON.parse(sessionStorage.getItem(SESSION_KEY)||'null');}catch{return null;}}
+function ssess(s){sessionStorage.setItem(SESSION_KEY,JSON.stringify(s));}
+function csess(){sessionStorage.removeItem(SESSION_KEY);}
+
+// ── Data ──
+let D=dd();
+function dd(){return{products:[],assignments:[],customers:[],contacts:[],_cid:1,_hid:1};}
+function ldData(){try{const d=JSON.parse(localStorage.getItem(CRM_KEY)||'null');return d?{...dd(),...d}:dd();}catch{return dd();}}
+function svData(){
+  const j=JSON.stringify(D);
+  try{localStorage.setItem(CRM_KEY,j);}catch{toast('保存失敗: ストレージ容量不足','error');return;}
+  if(j.length>WARN_BYTES)toast(`ストレージ${(j.length/1024/1024).toFixed(1)}MB使用中。エクスポートを推奨します`,'warn');
+}
+function ldKpi(){try{return JSON.parse(localStorage.getItem(KPI_KEY)||'null');}catch{return null;}}
+
+// ── Utils ──
+let _tt;
+function toast(msg,type=''){
+  const el=document.getElementById('toast');
+  el.className='toast'+(type?` toast-${type}`:'');
+  el.textContent=msg;el.classList.add('show');
+  clearTimeout(_tt);_tt=setTimeout(()=>el.classList.remove('show'),3000);
+}
+function esc(s){const d=document.createElement('div');d.textContent=String(s??'');return d.innerHTML;}
+function p2(n){return String(n).padStart(2,'0');}
+function fmtD(ts){if(!ts)return'';const d=new Date(ts);return`${d.getFullYear()}/${p2(d.getMonth()+1)}/${p2(d.getDate())}`;}
+function fmtDT(ts){if(!ts)return'';const d=new Date(ts);return`${d.getFullYear()}/${p2(d.getMonth()+1)}/${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;}
+function staffName(si){return ldKpi()?._staffList?.[si]||`スタッフ${si}`;}
+function prodName(pid){return D.products.find(p=>p.id===pid)?.name||pid;}
+function lastContact(cid){const h=[...D.contacts.filter(h=>h.cid===cid)].sort((a,b)=>b.at-a.at);return h[0]?.at?fmtD(h[0].at):'';}
+function statusBadge(s){const m={'未対応':'bd','優先対応':'bp','対応中':'bw','完了':'bs'};return`<span class="badge ${m[s]||'bd'}">${esc(s)}</span>`;}
+
+// ── State ──
+let sess=null,pg='portal';
+let ui={
+  portalStaff:'all',
+  ctx:null,         // {si,year,month,pid} from portal card
+  ls:'',lstat:'all',// list search, status filter
+  dcid:null,dtab:'all', // detail: customer id, tab
+  stab:'products',  // settings tab
+  modal:null,eid:null, // modal type, edit customer id
+};
+
+// ── Render ──
+function render(){
+  sess=lsess();
+  document.getElementById('app').innerHTML=sess?appHTML():loginHTML();
+  bind();
+}
+
+// ── Login ──
+function loginHTML(){
+  const kpi=ldKpi(),sl=kpi?._staffList||[];
+  const opts=sl.map((n,i)=>`<option value="${i}">${esc(n)}</option>`).join('');
+  return`<div class="login-wrap"><div class="login-card">
+    <div class="login-logo"><i class="ti ti-address-book"></i> CRM 顧客管理</div>
+    <div class="login-sub">顧客管理システム</div>
+    <div class="login-notice"><i class="ti ti-lock"></i> KPIにログイン済みでも、CRMへの再ログインが必要です</div>
+    <div class="fg"><label class="fl">ログイン区分</label><select class="sel w-full" id="lt"><option value="staff">スタッフ</option><option value="admin">管理者</option></select></div>
+    <div class="fg" id="sw"><label class="fl">スタッフ名</label><select class="sel w-full" id="ls">${opts||'<option>（KPIデータなし）</option>'}</select></div>
+    <div class="fg"><label class="fl">パスワード</label><input type="password" class="fc" id="lpw" placeholder="パスワードを入力" autocomplete="current-password"></div>
+    <button class="btn btn-primary w-full" style="justify-content:center" id="lbtn"><i class="ti ti-login"></i> ログイン</button>
+    <div style="text-align:center;margin-top:14px"><a href="kpi_system.html" style="font-size:12px;color:var(--text-2);text-decoration:none"><i class="ti ti-arrow-left"></i> KPI管理に戻る</a></div>
+  </div></div>`;
+}
+
+// ── App shell ──
+function appHTML(){
+  const adm=sess.role==='admin';
+  const stab=adm?`<span class="topnav-tab${pg==='settings'?' active':''}" data-nav="settings"><i class="ti ti-settings"></i> 設定</span>`:'';
+  return`<div>
+  <nav class="topnav">
+    <a href="kpi_system.html" class="topnav-tab"><i class="ti ti-layout-dashboard"></i> KPI管理</a>
+    <span class="topnav-tab${pg!=='settings'?' active':''}" data-nav="portal"><i class="ti ti-address-book"></i> CRM（顧客管理）</span>
+    ${stab}
+    <div class="topnav-right">
+      <span class="tnbadge tnbadge-${sess.role}">${esc(sess.name)}</span>
+      <button class="btn btn-sm btn-ghost" id="logout-btn"><i class="ti ti-logout"></i></button>
+    </div>
+  </nav>
+  <div id="parea">${pageHTML()}</div>
+  ${ui.modal?modalHTML():''}
+</div>`;
+}
+
+function pageHTML(){
+  if(pg==='portal')   return portalHTML();
+  if(pg==='customers')return customersHTML();
+  if(pg==='detail')   return detailHTML();
+  if(pg==='settings') return settingsHTML();
+  return '';
+}
+
+// ── Portal ──
+function portalHTML(){
+  const kpi=ldKpi(),sl=kpi?._staffList||[];
+  const adm=sess.role==='admin';
+  let asgns=[...D.assignments];
+  if(!adm) asgns=asgns.filter(a=>a.si===sess.user);
+  else if(ui.portalStaff!=='all') asgns=asgns.filter(a=>a.si===parseInt(ui.portalStaff));
+  asgns.sort((a,b)=>a.year!==b.year?a.year-b.year:a.month-b.month);
+
+  const cards=asgns.map(a=>{
+    const s=season(a.month);
+    const sn=adm?`<div class="s-card-staff">${esc(sl[a.si]||`スタッフ${a.si}`)}</div>`:'';
+    return`<div class="s-card" style="background:${s.bg};color:${s.fg}" data-asi="${a.si}" data-ay="${a.year}" data-am="${a.month}" data-ap="${a.pid}">
+      <div class="s-card-tag">${s.label}</div>
+      <div class="s-card-deco">${s.deco}</div>
+      ${sn}
+      <div class="s-card-year">${a.year}年</div>
+      <div class="s-card-month">${a.month}月</div>
+      <div class="s-card-prod">${esc(prodName(a.pid))}</div>
+      <div class="s-card-footer"><button class="s-card-btn" style="color:${s.fg}">顧客一覧を見る</button></div>
+    </div>`;
+  }).join('');
+
+  const sf=adm&&sl.length?`<select class="sel" id="psf">
+    <option value="all">全スタッフ</option>
+    ${sl.map((n,i)=>`<option value="${i}"${ui.portalStaff===String(i)?' selected':''}>${esc(n)}</option>`).join('')}
+  </select>`:'';
+
+  return`<div class="portal-bg"><div class="portal-inner">
+    <div class="portal-header">
+      <div class="portal-title"><i class="ti ti-package" style="font-size:24px"></i> CRM ポータル</div>
+      <div style="margin-left:auto">${sf}</div>
+    </div>
+    ${asgns.length?`<div class="portal-grid">${cards}</div>`:`<div class="portal-empty"><i class="ti ti-calendar-plus"></i><p>${adm?'設定から担当割り当てを追加してください':'担当割り当てがありません'}</p></div>`}
+  </div></div>`;
+}
+
+// ── Customer List ──
+function customersHTML(){
+  const {ctx,ls,lstat}=ui;
+  const kpi=ldKpi(),sl=kpi?._staffList||[];
+  const adm=sess.role==='admin';
+
+  let custs=[...D.customers];
+  if(ctx){
+    const cids=new Set(D.contacts.filter(h=>h.si===ctx.si&&h.pid===ctx.pid&&h.year===ctx.year&&h.month===ctx.month).map(h=>h.cid));
+    custs=custs.filter(c=>cids.has(c.id)||(c.ctx||[]).some(x=>x.si===ctx.si&&x.pid===ctx.pid&&x.year===ctx.year&&x.month===ctx.month));
+  } else if(!adm){
+    const mine=new Set([...D.contacts.filter(h=>h.si===sess.user).map(h=>h.cid),...D.customers.filter(c=>(c.ctx||[]).some(x=>x.si===sess.user)).map(c=>c.id)]);
+    custs=custs.filter(c=>mine.has(c.id));
+  }
+  if(ls){const q=ls.toLowerCase();custs=custs.filter(c=>c.name.toLowerCase().includes(q)||(c.company||'').toLowerCase().includes(q)||(c.tel||'').includes(q));}
+  if(lstat!=='all') custs=custs.filter(c=>c.status===lstat);
+
+  const crumb=ctx?`<div class="crumb"><span class="crumb-link" data-nav="portal">CRM ポータル</span><i class="ti ti-chevron-right" style="font-size:11px"></i><span>${ctx.year}年${ctx.month}月 / ${esc(prodName(ctx.pid))}${ctx.si!=null?' / '+esc(sl[ctx.si]||''):''}</span></div>`:'';
+
+  const rows=custs.map(c=>`<tr>
+    <td class="tip">${c.id}</td>
+    <td style="font-weight:600">${esc(c.name)}</td>
+    <td>${esc(c.company||'')}</td>
+    <td>${esc(c.tel||'')}</td>
+    <td class="tip">${lastContact(c.id)}</td>
+    <td>${statusBadge(c.status)}</td>
+    <td><button class="btn btn-sm btn-primary" data-det="${c.id}">詳細・履歴を見る</button></td>
+  </tr>`).join('');
+
+  const canAdd=adm||(sess.role==='staff'&&!!ctx);
+
+  return`<div class="page">
+    ${crumb}
+    <div class="list-head">
+      <div class="list-title">顧客一覧</div>
+      <div class="list-tools">
+        <div class="search-wrap"><i class="ti ti-search"></i><input type="text" placeholder="検索" id="lsrch" value="${esc(ls)}"></div>
+        <label style="font-size:13px;color:var(--text-2)">ステータス</label>
+        <select class="sel" id="lstat">
+          <option value="all"${lstat==='all'?' selected':''}>すべて</option>
+          ${STATUSES.map(s=>`<option value="${s}"${lstat===s?' selected':''}>${s}</option>`).join('')}
+        </select>
+        ${canAdd?`<button class="btn btn-primary" id="add-cust"><i class="ti ti-user-plus"></i> 新規登録</button>`:''}
+      </div>
+    </div>
+    <div class="table-wrap"><table class="t">
+      <thead><tr><th>ID</th><th>顧客名</th><th>会社名/所属</th><th>電話番号</th><th>最新対応日</th><th>ステータス</th><th></th></tr></thead>
+      <tbody>${rows||`<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--text-3)">顧客データがありません</td></tr>`}</tbody>
+    </table></div>
+  </div>`;
+}
+
+// ── Customer Detail ──
+function detailHTML(){
+  const c=D.customers.find(x=>x.id===ui.dcid);
+  if(!c) return`<div class="page"><p>顧客が見つかりません</p></div>`;
+  const kpi=ldKpi(),sl=kpi?._staffList||[];
+  const adm=sess.role==='admin';
+  const allH=[...D.contacts.filter(h=>h.cid===c.id)].sort((a,b)=>b.at-a.at);
+  const combos=[...new Map(allH.map(h=>[`${h.si}_${h.pid}`,{si:h.si,pid:h.pid}])).values()];
+
+  const tabsH=[
+    `<span class="h-tab${ui.dtab==='all'?' active':''}" data-ht="all">全履歴</span>`,
+    ...combos.map(x=>{const k=`${x.si}_${x.pid}`;return`<span class="h-tab${ui.dtab===k?' active':''}" data-ht="${k}">${esc(staffName(x.si))} / ${esc(prodName(x.pid))}</span>`;})
+  ].join('');
+
+  let fH=allH;
+  if(ui.dtab!=='all'){const[si,pid]=ui.dtab.split('_');fH=allH.filter(h=>String(h.si)===si&&h.pid===pid);}
+
+  const tlItems=fH.map(h=>`<li class="tl-item">
+    <span class="tl-icon"><i class="ti ${METHOD_ICONS[h.method]||REASON_ICONS[h.reason]||'ti-message'}"></i></span>
+    <div class="tl-meta">${fmtDT(h.at)} — ${esc(staffName(h.si))}${h.manager?` <span style="color:var(--text-3)">/ 責任者: ${esc(h.manager)}</span>`:''} — ${esc(prodName(h.pid))}</div>
+    <div style="font-size:11px;color:var(--text-3);margin-bottom:3px">${h.method?esc(h.method)+' / ':''}${esc(h.reason)}</div>
+    <div class="tl-body">${esc(h.content)}</div>
+  </li>`).join('');
+
+  const dSi=adm?(ui.ctx?.si??0):sess.user;
+  const dPid=ui.ctx?.pid??D.products[0]?.id??'';
+  const dY=ui.ctx?.year??new Date().getFullYear();
+  const dM=ui.ctx?.month??new Date().getMonth()+1;
+  const now=new Date();
+  const dDt=`${now.getFullYear()}-${p2(now.getMonth()+1)}-${p2(now.getDate())}T${p2(now.getHours())}:${p2(now.getMinutes())}`;
+
+  const staffOpts=adm?sl.map((n,i)=>`<option value="${i}"${i===dSi?' selected':''}>${esc(n)}</option>`).join(''):`<option value="${sess.user}">${esc(sess.name)}</option>`;
+  const prodOpts=D.products.map(p=>`<option value="${p.id}"${p.id===dPid?' selected':''}>${esc(p.name)}</option>`).join('');
+  const tags=(c.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join('');
+
+  const ymFields=adm
+    ?`<div style="margin-top:6px;font-size:12px;color:var(--text-3)">年月: <input type="number" id="hy" value="${dY}" style="width:60px;border:1px solid var(--border);border-radius:4px;padding:2px 4px;font-size:12px"> 年 <input type="number" id="hm" value="${dM}" style="width:40px;border:1px solid var(--border);border-radius:4px;padding:2px 4px;font-size:12px"> 月</div>`
+    :`<input type="hidden" id="hy" value="${dY}"><input type="hidden" id="hm" value="${dM}">`;
+
+  const cstatOpts=`<option value="">変更なし</option>`+STATUSES.map(s=>`<option value="${s}">${s}</option>`).join('');
+
+  return`<div class="page">
+  <div class="detail-head">
+    <div class="detail-title">顧客管理（CRM）</div>
+    <button class="btn btn-sm" style="margin-left:auto" id="back-btn"><i class="ti ti-arrow-left"></i> 一覧へ戻る</button>
+  </div>
+  <div class="detail-grid">
+    <div>
+      <div class="cust-card">
+        <div class="avatar"><i class="ti ti-user"></i></div>
+        <div class="cust-label">顧客詳細</div>
+        <div class="cust-name">${esc(c.name)}</div>
+        <div style="margin:8px 0">${statusBadge(c.status)}</div>
+        <div style="margin-top:10px">
+          <div class="irow"><span class="ikey">ID</span><span class="ival">${c.id}</span></div>
+          <div class="irow"><span class="ikey">会社名/所属</span><span class="ival">${esc(c.company||'')}</span></div>
+          ${c.role?`<div class="irow"><span class="ikey">役職</span><span class="ival">${esc(c.role)}</span></div>`:''}
+          ${c.postalCode?`<div class="irow"><span class="ikey">郵便番号</span><span class="ival">〒${esc(c.postalCode)}</span></div>`:''}
+          <div class="irow"><span class="ikey">住所</span><span class="ival">${esc(c.address||'')}</span></div>
+          <div class="irow"><span class="ikey">契約先電話番号</span><span class="ival">${esc(c.tel||'')}${c.tel?`<button class="cpbtn" data-cp="${esc(c.tel)}"><i class="ti ti-copy"></i></button>`:''}</span></div>
+          ${c.tel2?`<div class="irow"><span class="ikey">連絡先電話番号</span><span class="ival">${esc(c.tel2)}<button class="cpbtn" data-cp="${esc(c.tel2)}"><i class="ti ti-copy"></i></button></span></div>`:''}
+          <div class="irow"><span class="ikey">メール</span><span class="ival">${esc(c.email||'')}${c.email?`<button class="cpbtn" data-cp="${esc(c.email)}"><i class="ti ti-copy"></i></button>`:''}</span></div>
+          ${tags?`<div class="irow"><span class="ikey">顧客タグ</span><span class="ival" style="flex-wrap:wrap">${tags}</span></div>`:''}
+          <div class="irow"><span class="ikey">最新対応日</span><span class="ival">${lastContact(c.id)}</span></div>
+        </div>
+        ${adm?`<div style="margin-top:12px"><button class="btn btn-sm" data-edit="${c.id}"><i class="ti ti-edit"></i> 編集</button></div>`:''}
+      </div>
+    </div>
+    <div>
+      <div class="panel">
+        <div class="panel-title"><i class="ti ti-pencil-plus"></i> 対応履歴入力</div>
+        <div class="fg"><label class="fl">日時</label><input type="datetime-local" class="fc" id="hdt" value="${dDt}"></div>
+        <div class="frow">
+          <div class="fg"><label class="fl">担当者</label><select class="sel w-full" id="hsi">${staffOpts}</select></div>
+          <div class="fg"><label class="fl">責任者</label><input class="fc" id="hmanager" placeholder="責任者名を入力"></div>
+        </div>
+        <div class="frow">
+          <div class="fg"><label class="fl">対応方法</label><select class="sel w-full" id="hmethod">${METHODS.map(m=>`<option>${m}</option>`).join('')}</select></div>
+          <div class="fg"><label class="fl">対応理由</label><select class="sel w-full" id="hreason">${REASONS.map(r=>`<option>${r}</option>`).join('')}</select></div>
+        </div>
+        <div class="fg"><label class="fl">商材</label><select class="sel w-full" id="hpid">${prodOpts||'<option value="">（商材なし）</option>'}</select></div>
+        <div class="fg"><label class="fl">対応内容</label><textarea class="fc" id="hcontent" rows="3" placeholder="対応内容を入力..."></textarea></div>
+        <div class="fg">
+          <label class="fl">対応ステータス <span style="font-size:11px;color:var(--text-3)">※保存すると顧客のステータスも更新されます</span></label>
+          <select class="sel w-full" id="h-cstat">${cstatOpts}</select>
+        </div>
+        ${ymFields}
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn btn-primary" id="sv-contact" data-cid="${c.id}"><i class="ti ti-device-floppy"></i> 保存</button>
+          <button class="btn" id="cl-contact"><i class="ti ti-x"></i> キャンセル</button>
+        </div>
+        <div id="cc-bar" style="display:none;align-items:center;gap:8px;padding:10px 14px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:var(--r);margin-top:8px;flex-wrap:wrap">
+          <i class="ti ti-alert-circle" style="color:#D97706"></i>
+          <span style="font-size:13px;font-weight:500;flex:1">この内容で保存しますか？</span>
+          <button class="btn btn-sm btn-primary" id="cc-ok" data-cid="${c.id}">確定する</button>
+          <button class="btn btn-sm" id="cc-cancel">戻る</button>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title"><i class="ti ti-timeline"></i> 過去の対応履歴</div>
+        <div class="h-tabs">${tabsH}</div>
+        ${fH.length?`<ul class="timeline">${tlItems}</ul>`:`<div class="tl-empty"><i class="ti ti-history"></i> 対応履歴がありません</div>`}
+      </div>
+    </div>
+  </div>
+</div>`;
+}
+
+// ── Settings ──
+function settingsHTML(){
+  if(sess.role!=='admin') return`<div class="page"><p>管理者のみアクセスできます</p></div>`;
+  const kpi=ldKpi(),sl=kpi?._staffList||[];
+  const tabs=`<div class="stabs">
+    <span class="stab${ui.stab==='products'?' active':''}" data-stab="products">商材管理</span>
+    <span class="stab${ui.stab==='assignments'?' active':''}" data-stab="assignments">担当割り当て</span>
+    <span class="stab${ui.stab==='export'?' active':''}" data-stab="export">データ管理</span>
+  </div>`;
+  let body='';
+  if(ui.stab==='products') body=prodTabHTML();
+  else if(ui.stab==='assignments') body=assignTabHTML(sl);
+  else body=exportTabHTML();
+  return`<div class="page"><h2 style="font-size:20px;font-weight:800;margin-bottom:16px">設定</h2>${tabs}${body}</div>`;
+}
+
+function prodTabHTML(){
+  const rows=D.products.map(p=>`<tr>
+    <td class="tip" style="width:100px">${p.id}</td>
+    <td style="font-weight:600">${esc(p.name)}</td>
+    <td style="width:60px"><button class="btn btn-sm btn-danger" data-dp="${p.id}"><i class="ti ti-trash"></i></button></td>
+  </tr>`).join('');
+  return`<div class="card">
+    <div class="sec-title"><i class="ti ti-package"></i> 商材マスタ</div>
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <input class="fc" id="npname" placeholder="商材名を入力" style="max-width:220px">
+      <button class="btn btn-primary" id="addprod"><i class="ti ti-plus"></i> 追加</button>
+    </div>
+    <div class="table-wrap"><table class="t" style="max-width:440px">
+      <thead><tr><th>ID</th><th>商材名</th><th></th></tr></thead>
+      <tbody>${rows||`<tr><td colspan="3" style="text-align:center;color:var(--text-3);padding:20px">商材がありません</td></tr>`}</tbody>
+    </table></div>
+  </div>`;
+}
+
+function assignTabHTML(sl){
+  const sOpts=sl.map((n,i)=>`<option value="${i}">${esc(n)}</option>`).join('');
+  const pOpts=D.products.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  const now=new Date();
+  const rows=D.assignments.map(a=>`<tr>
+    <td>${esc(staffName(a.si))}</td>
+    <td>${a.year}年${a.month}月</td>
+    <td>${esc(prodName(a.pid))}</td>
+    <td><button class="btn btn-sm btn-danger" data-da="${a.id}"><i class="ti ti-trash"></i></button></td>
+  </tr>`).join('');
+  return`<div class="card">
+    <div class="sec-title"><i class="ti ti-calendar-user"></i> 担当割り当て</div>
+    ${!D.products.length?`<p style="color:var(--text-danger);font-size:13px;margin-bottom:10px"><i class="ti ti-alert-triangle"></i> 先に商材マスタを追加してください</p>`:''}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
+      <div><label class="fl">スタッフ</label><select class="sel" id="asi">${sOpts}</select></div>
+      <div><label class="fl">年</label><input type="number" class="fc" id="ay" value="${now.getFullYear()}" style="width:80px"></div>
+      <div><label class="fl">月</label><select class="sel" id="am">${Array.from({length:12},(_,i)=>`<option value="${i+1}"${i+1===now.getMonth()+1?' selected':''}>${i+1}月</option>`).join('')}</select></div>
+      <div><label class="fl">商材</label><select class="sel" id="apid">${pOpts||'<option value="">（商材なし）</option>'}</select></div>
+      <button class="btn btn-primary" id="addassign" ${!D.products.length?'disabled':''}><i class="ti ti-plus"></i> 追加</button>
+    </div>
+    <div class="table-wrap"><table class="t">
+      <thead><tr><th>スタッフ</th><th>年月</th><th>商材</th><th></th></tr></thead>
+      <tbody>${rows||`<tr><td colspan="4" style="text-align:center;color:var(--text-3);padding:20px">割り当てがありません</td></tr>`}</tbody>
+    </table></div>
+  </div>`;
+}
+
+function exportTabHTML(){
+  const size=JSON.stringify(D).length;
+  const pct=Math.min(100,(size/WARN_BYTES*100)).toFixed(1);
+  const col=size>WARN_BYTES?'var(--danger)':size>WARN_BYTES*.7?'var(--warning)':'var(--success)';
+  const remaining=Math.max(0,((WARN_BYTES-size)/1024)).toFixed(0);
+  const statusMsg=size>WARN_BYTES?'⚠ 容量がいっぱいです。今すぐバックアップしてください':size>WARN_BYTES*.7?'⚠ 残り少なくなっています':'✓ まだ余裕があります';
+  const statusCol=size>WARN_BYTES?'var(--text-danger)':size>WARN_BYTES*.7?'var(--text-warning)':'var(--text-success)';
+
+  return`
+  <div class="card">
+    <div class="sec-title"><i class="ti ti-battery"></i> データの保存残量</div>
+    <p style="font-size:13px;color:var(--text-2);margin-bottom:8px">このシステムはブラウザの中にデータを保存しています。入れられるデータには上限があります。</p>
+    <div class="storage-bar"><div class="storage-fill" style="width:${pct}%;background:${col}"></div></div>
+    <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:12px">
+      <span style="color:${statusCol};font-weight:600">${statusMsg}</span>
+      <span style="color:var(--text-3)">残り約 ${remaining} KB</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sec-title"><i class="ti ti-device-floppy"></i> データをファイルに保存する（バックアップ）</div>
+    <p style="font-size:13px;color:var(--text-2);margin-bottom:14px">データをパソコンのファイルとして保存しておけます。万が一データが消えても復元できます。</p>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg)">
+        <i class="ti ti-database-export" style="font-size:28px;color:var(--accent);flex-shrink:0"></i>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:13px">すべてのデータをまとめて保存</div>
+          <div style="font-size:12px;color:var(--text-2);margin-top:2px">顧客・履歴・商材・割り当てをまるごとバックアップ。<br>後で復元するときはこれを使います。</div>
+        </div>
+        <button class="btn btn-primary btn-sm" id="exp-all"><i class="ti ti-download"></i> 保存する</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg)">
+        <i class="ti ti-package" style="font-size:28px;color:var(--text-2);flex-shrink:0"></i>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:13px">商材リストだけを保存</div>
+          <div style="font-size:12px;color:var(--text-2);margin-top:2px">商材A・Bなどの名前一覧のみ保存します。<br>プロジェクト終了後に別の場所へ移すときに使います。</div>
+        </div>
+        <button class="btn btn-sm" id="exp-prod"><i class="ti ti-download"></i> 保存する</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg)">
+        <i class="ti ti-table-export" style="font-size:28px;color:var(--text-2);flex-shrink:0"></i>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:13px">顧客一覧をExcelで開ける形式で保存</div>
+          <div style="font-size:12px;color:var(--text-2);margin-top:2px">顧客の名前・会社名・電話番号などをExcelやスプレッドシートで確認できます。</div>
+        </div>
+        <button class="btn btn-sm" id="exp-csv"><i class="ti ti-download"></i> 保存する</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sec-title"><i class="ti ti-restore"></i> バックアップから元に戻す（復元）</div>
+    <p style="font-size:13px;color:var(--text-2);margin-bottom:8px">以前に「すべてのデータをまとめて保存」したファイルを選ぶと、データを元に戻せます。</p>
+    <div style="padding:12px;border:2px solid var(--bg-danger);border-radius:var(--r);background:var(--bg-danger);margin-bottom:12px">
+      <p style="font-size:12px;color:var(--text-danger);font-weight:600"><i class="ti ti-alert-triangle"></i> 注意：今あるデータはすべて消えて、ファイルの内容に入れ替わります</p>
+    </div>
+    <input type="file" id="impfile" accept=".json" style="font-size:13px">
+    <div style="margin-top:10px"><button class="btn btn-primary" id="impbtn"><i class="ti ti-restore"></i> 復元する</button></div>
+  </div>`;
+}
+
+// ── Modal ──
+function modalHTML(){
+  const kpi=ldKpi(),sl=kpi?._staffList||[];
+  const ctx=ui.ctx;
+  const isEdit=ui.modal==='edit-cust';
+  const ec=isEdit?D.customers.find(x=>x.id===ui.eid):null;
+
+  const ctxNote=!isEdit&&ctx?`<p style="font-size:12px;color:var(--text-2);margin-bottom:12px"><i class="ti ti-link"></i> ${ctx.year}年${ctx.month}月 / ${esc(prodName(ctx.pid))} / ${esc(sl[ctx.si]||'')} に登録</p>`:'';
+
+  const v=f=>esc(ec?.[f]||'');
+  const st=isEdit&&ec?STATUSES.map(s=>`<option${ec.status===s?' selected':''}>${s}</option>`).join(''):STATUSES.map(s=>`<option>${s}</option>`).join('');
+  const roleOpts=ROLES.map(r=>`<option${ec?.role===r?' selected':''}>${r}</option>`).join('');
+
+  return`<div class="modal-ov" id="mov">
+    <div class="modal">
+      <div class="modal-title"><i class="ti ti-${isEdit?'edit':'user-plus'}"></i> 顧客${isEdit?'編集':'新規登録'}</div>
+      ${ctxNote}
+      <div class="frow"><div class="fg"><label class="fl">顧客名 *</label><input class="fc" id="mn" value="${v('name')}" placeholder="山田 太郎"></div>
+        <div class="fg"><label class="fl">会社名/所属</label><input class="fc" id="mc" value="${v('company')}" placeholder="株式会社〇〇"></div></div>
+      <div class="frow"><div class="fg"><label class="fl">役職</label><select class="sel w-full" id="mr"><option value="">選択してください</option>${roleOpts}</select></div>
+        <div class="fg"><label class="fl">ステータス</label><select class="sel w-full" id="mst">${st}</select></div></div>
+      <div class="frow"><div class="fg"><label class="fl">契約先電話番号</label><input class="fc" id="mt" value="${v('tel')}" placeholder="03-0000-0000"></div>
+        <div class="fg"><label class="fl">連絡先電話番号</label><input class="fc" id="mt2" value="${v('tel2')}" placeholder="090-0000-0000"></div></div>
+      <div class="fg"><label class="fl">メールアドレス</label><input class="fc" id="me" value="${v('email')}" placeholder="example@email.com"></div>
+      <div class="fg">
+        <label class="fl">郵便番号 <span style="font-size:11px;color:var(--text-3)">（入力後「住所を検索」で自動補完）</span></label>
+        <div style="display:flex;gap:6px">
+          <input class="fc" id="mzip" value="${v('postalCode')}" placeholder="1234567（ハイフンなし）" style="max-width:180px">
+          <button class="btn btn-sm" type="button" id="zip-lookup"><i class="ti ti-map-pin-search"></i> 住所を検索</button>
+        </div>
+      </div>
+      <div class="fg"><label class="fl">住所 <span style="font-size:11px;color:var(--text-3)">（郵便番号検索後、番地以降を追記してください）</span></label><input class="fc" id="ma" value="${v('address')}" placeholder="東京都千代田区〇〇 1-1-1"></div>
+      <div class="fg"><label class="fl">顧客タグ（カンマ区切り）</label><input class="fc" id="mtg" value="${esc((ec?.tags||[]).join(', '))}" placeholder="VIP, 製造業"></div>
+      <div class="mfooter"><button class="btn" id="mcancel"><i class="ti ti-x"></i> キャンセル</button><button class="btn btn-primary" id="msave"><i class="ti ti-device-floppy"></i> ${isEdit?'更新':'登録'}</button></div>
+    </div>
+  </div>`;
+}
+
+// ── Bind events ──
+function bind(){
+  // Login
+  document.getElementById('lt')?.addEventListener('change',e=>{document.getElementById('sw').style.display=e.target.value==='admin'?'none':'';});
+  document.getElementById('lbtn')?.addEventListener('click',doLogin);
+  document.getElementById('lpw')?.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+  // Logout
+  document.getElementById('logout-btn')?.addEventListener('click',()=>{csess();render();});
+  // Top nav
+  document.querySelectorAll('[data-nav]').forEach(el=>{
+    el.addEventListener('click',()=>{pg=el.dataset.nav;if(pg==='portal')ui.ctx=null;render();});
+  });
+  // Portal
+  document.getElementById('psf')?.addEventListener('change',e=>{ui.portalStaff=e.target.value;render();});
+  document.querySelectorAll('[data-asi]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      ui.ctx={si:parseInt(el.dataset.asi),year:parseInt(el.dataset.ay),month:parseInt(el.dataset.am),pid:el.dataset.ap};
+      pg='customers';render();
+    });
+  });
+  // List
+  document.getElementById('lsrch')?.addEventListener('input',e=>{ui.ls=e.target.value;render();});
+  document.getElementById('lstat')?.addEventListener('change',e=>{ui.lstat=e.target.value;render();});
+  document.getElementById('add-cust')?.addEventListener('click',()=>{ui.modal='add-cust';ui.eid=null;render();});
+  document.querySelectorAll('[data-det]').forEach(el=>{el.addEventListener('click',()=>{ui.dcid=parseInt(el.dataset.det);ui.dtab='all';pg='detail';render();});});
+  // Detail
+  document.getElementById('back-btn')?.addEventListener('click',()=>{pg='customers';render();});
+  document.querySelectorAll('[data-ht]').forEach(el=>{el.addEventListener('click',()=>{ui.dtab=el.dataset.ht;render();});});
+  // sv-contact → show confirm bar (no save yet)
+  document.getElementById('sv-contact')?.addEventListener('click',()=>{
+    const content=(document.getElementById('hcontent')?.value||'').trim();
+    if(!content){toast('対応内容を入力してください','error');return;}
+    const bar=document.getElementById('cc-bar');
+    if(bar) bar.style.display='flex';
+  });
+  document.getElementById('cc-ok')?.addEventListener('click',saveContact);
+  document.getElementById('cc-cancel')?.addEventListener('click',()=>{
+    const bar=document.getElementById('cc-bar');if(bar) bar.style.display='none';
+  });
+  document.getElementById('cl-contact')?.addEventListener('click',()=>{
+    const el=document.getElementById('hcontent');if(el)el.value='';
+    const bar=document.getElementById('cc-bar');if(bar) bar.style.display='none';
+  });
+  // Zip lookup
+  document.getElementById('zip-lookup')?.addEventListener('click',lookupZip);
+  document.querySelectorAll('[data-cp]').forEach(el=>{el.addEventListener('click',()=>{navigator.clipboard.writeText(el.dataset.cp).then(()=>toast('コピーしました','ok'));});});
+  document.querySelectorAll('[data-edit]').forEach(el=>{el.addEventListener('click',()=>{ui.modal='edit-cust';ui.eid=parseInt(el.dataset.edit);render();});});
+  // Settings tabs
+  document.querySelectorAll('[data-stab]').forEach(el=>{el.addEventListener('click',()=>{ui.stab=el.dataset.stab;render();});});
+  // Products
+  document.getElementById('addprod')?.addEventListener('click',()=>{
+    const name=document.getElementById('npname')?.value.trim();
+    if(!name){toast('商材名を入力してください','error');return;}
+    D.products.push({id:'p'+Date.now(),name});svData();toast('商材を追加しました','ok');render();
+  });
+  document.querySelectorAll('[data-dp]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      if(D.assignments.some(a=>a.pid===el.dataset.dp)){toast('この商材は割り当てで使用中です','error');return;}
+      D.products=D.products.filter(p=>p.id!==el.dataset.dp);svData();toast('削除しました','ok');render();
+    });
+  });
+  // Assignments
+  document.getElementById('addassign')?.addEventListener('click',()=>{
+    const si=parseInt(document.getElementById('asi').value),year=parseInt(document.getElementById('ay').value),month=parseInt(document.getElementById('am').value),pid=document.getElementById('apid').value;
+    if(!pid){toast('商材を選択してください','error');return;}
+    if(D.assignments.some(a=>a.si===si&&a.year===year&&a.month===month&&a.pid===pid)){toast('同じ割り当てが既に存在します','error');return;}
+    D.assignments.push({id:'a'+Date.now(),si,year,month,pid});svData();toast('割り当てを追加しました','ok');render();
+  });
+  document.querySelectorAll('[data-da]').forEach(el=>{el.addEventListener('click',()=>{D.assignments=D.assignments.filter(a=>a.id!==el.dataset.da);svData();toast('削除しました','ok');render();});});
+  // Export / Import
+  document.getElementById('exp-all')?.addEventListener('click',()=>expJSON('crm_all',D));
+  document.getElementById('exp-prod')?.addEventListener('click',()=>expJSON('crm_products',{products:D.products}));
+  document.getElementById('exp-csv')?.addEventListener('click',expCSV);
+  document.getElementById('impbtn')?.addEventListener('click',()=>{
+    const f=document.getElementById('impfile')?.files[0];
+    if(!f){toast('ファイルを選択してください','error');return;}
+    const r=new FileReader();
+    r.onload=e=>{try{const d=JSON.parse(e.target.result);D={...dd(),...d};svData();toast('インポートしました','ok');render();}catch{toast('ファイル形式が正しくありません','error');}};
+    r.readAsText(f);
+  });
+  // Modal
+  document.getElementById('mov')?.addEventListener('click',e=>{if(e.target.id==='mov'){ui.modal=null;render();}});
+  document.getElementById('mcancel')?.addEventListener('click',()=>{ui.modal=null;render();});
+  document.getElementById('msave')?.addEventListener('click',saveCust);
+}
+
+// ── Login ──
+function doLogin(){
+  const kpi=ldKpi();if(!kpi){toast('KPIシステムのデータが見つかりません','error');return;}
+  const type=document.getElementById('lt')?.value||'staff';
+  const pw=document.getElementById('lpw')?.value||'';
+  if(!pw){toast('パスワードを入力してください','error');return;}
+  if(type==='admin'){
+    if(pw!==(kpi.adminPw||'admin@1234')){toast('パスワードが違います','error');return;}
+    ssess({role:'admin',user:null,name:'管理者'});
+  } else {
+    const si=parseInt(document.getElementById('ls')?.value??'-1');
+    const sl=kpi._staffList||[];
+    if(si<0||si>=sl.length){toast('スタッフを選択してください','error');return;}
+    if(pw!==(kpi.staffPw?.[si]?.pw||'kpi@1234')){toast('パスワードが違います','error');return;}
+    ssess({role:'staff',user:si,name:sl[si]});
+  }
+  render();
+}
+
+// ── Save contact ──
+function saveContact(){
+  const cid=parseInt(document.getElementById('cc-ok').dataset.cid);
+  const content=(document.getElementById('hcontent')?.value||'').trim();
+  if(!content){toast('対応内容を入力してください','error');return;}
+  const pid=document.getElementById('hpid')?.value;
+  if(!pid){toast('商材を選択してください','error');return;}
+  const dtv=document.getElementById('hdt')?.value;
+  const at=dtv?new Date(dtv).getTime():Date.now();
+  const si=parseInt(document.getElementById('hsi')?.value);
+  const method=document.getElementById('hmethod')?.value||METHODS[0];
+  const reason=document.getElementById('hreason')?.value||REASONS[0];
+  const manager=(document.getElementById('hmanager')?.value||'').trim();
+  const year=parseInt(document.getElementById('hy')?.value||new Date().getFullYear());
+  const month=parseInt(document.getElementById('hm')?.value||new Date().getMonth()+1);
+  const contactStatus=document.getElementById('h-cstat')?.value||'';
+  D.contacts.push({id:'h'+D._hid++,cid,si,pid,year,month,at,method,reason,manager,content});
+  const c=D.customers.find(x=>x.id===cid);
+  if(c){
+    c.lastAt=at;
+    if(contactStatus) c.status=contactStatus;
+  }
+  svData();toast('保存しました','ok');render();
+}
+
+// ── Save customer ──
+function saveCust(){
+  const name=(document.getElementById('mn')?.value||'').trim();
+  if(!name){toast('顧客名を入力してください','error');return;}
+  const company=(document.getElementById('mc')?.value||'').trim();
+  const role=document.getElementById('mr')?.value||'';
+  const tel=(document.getElementById('mt')?.value||'').trim();
+  const tel2=(document.getElementById('mt2')?.value||'').trim();
+  const email=(document.getElementById('me')?.value||'').trim();
+  const postalCode=(document.getElementById('mzip')?.value||'').replace(/[^0-9]/g,'');
+  const address=(document.getElementById('ma')?.value||'').trim();
+  const status=document.getElementById('mst')?.value||STATUSES[0];
+  const tags=(document.getElementById('mtg')?.value||'').split(',').map(t=>t.trim()).filter(Boolean);
+
+  if(ui.modal==='edit-cust'&&ui.eid){
+    const c=D.customers.find(x=>x.id===ui.eid);
+    if(c) Object.assign(c,{name,company,role,tel,tel2,email,postalCode,address,status,tags});
+    svData();toast('更新しました','ok');ui.modal=null;render();
+  } else {
+    const ctx=ui.ctx?[{...ui.ctx}]:[];
+    D.customers.push({id:D._cid++,name,company,role,tel,tel2,email,postalCode,address,status,tags,ctx,createdAt:Date.now()});
+    svData();toast('顧客を登録しました','ok');ui.modal=null;render();
+  }
+}
+
+// ── Zip lookup ──
+async function lookupZip(){
+  const raw=(document.getElementById('mzip')?.value||'');
+  const zip=raw.replace(/[^0-9０-９]/g,'').replace(/[０-９]/g,s=>String.fromCharCode(s.charCodeAt(0)-0xFEE0));
+  if(zip.length!==7){toast('郵便番号を7桁（ハイフンなし）で入力してください','error');return;}
+  try{
+    const res=await fetch(`https://zipcloud.ibsnet.co.jp/api/search?zipcode=${zip}`);
+    const data=await res.json();
+    if(data.results?.[0]){
+      const r=data.results[0];
+      const addr=r.address1+r.address2+r.address3;
+      const el=document.getElementById('ma');
+      if(el){el.value=addr;el.focus();}
+      toast('住所（都道府県〜丁目まで）を入力しました。番地以降を追記してください','ok');
+    }else{toast('該当する住所が見つかりませんでした','error');}
+  }catch{toast('住所の自動入力に失敗しました','error');}
+}
+
+// ── Export ──
+function expJSON(name,data){
+  const b=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`${name}_${new Date().toISOString().slice(0,10)}.json`;a.click();
+}
+function expCSV(){
+  const h=['ID','顧客名','会社名','役職','電話番号','メール','住所','ステータス','タグ','登録日'];
+  const rows=D.customers.map(c=>[c.id,c.name,c.company||'',c.role||'',c.tel||'',c.email||'',c.address||'',c.status,(c.tags||[]).join('|'),fmtD(c.createdAt)]);
+  const csv=[h,...rows].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const b=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`crm_customers_${new Date().toISOString().slice(0,10)}.csv`;a.click();
+}
+
+D=ldData();
+render();
+</script>
+</body>
+</html>

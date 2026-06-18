@@ -6,54 +6,23 @@
 
 ---
 
-### 【最優先】アラートからのページ遷移ボタン ＋ 目標・着地の目視確認
+### 【次優先】未対応事項（2026-06-18時点）
 
-対象ファイル：`kpi_system.html`（現在 約3530行）
+対象ファイル：`kpi_system.html`（現在 約3620行）
 
-#### ① 残業アラートに「申請する」ボタン追加
-
-`alertsPanelHTML()`（関数内の `active.map(...)` 部分）で、アラートの `msg` に「残業」が含まれる場合、アラート行の右端に「申請する」ボタンを追加。
-
-- クリック → `state.page='attendance'; render();`
-- スタッフが自分の残業申請フォーム（打刻ページ下部 `attExtraHTML`）へ直接遷移
-
-```javascript
-// alertsPanelHTML() の active.map 内、ボタン部分に追加
-${a.msg.includes('残業')?`<button class="btn btn-sm btn-primary" onclick="state.page='attendance';render();" style="font-size:11px;flex-shrink:0"><i class="ti ti-send"></i> 申請</button>`:''}
-```
-
-#### ② KPI未達成アラートに「KPIを確認」ボタン追加
-
-アラートの `msg` に「KPI達成率」が含まれる場合、「KPIを確認」ボタンを追加。
-
-- クリック → `state.page='kpi'; state.kpiTab='rate'; render();`
-- 率指標タブ（`kpiTab='rate'`）を開いて達成状況を直接確認できる
-
-```javascript
-${a.msg.includes('KPI達成率')?`<button class="btn btn-sm" onclick="state.page='kpi';state.kpiTab='rate';render();" style="font-size:11px;flex-shrink:0"><i class="ti ti-chart-bar"></i> KPI確認</button>`:''}
-```
-
-#### ③ 目標 vs 着地の目視確認カードを追加
-
-`dashboardPage()` または `teamPage()` に、KPI目標と現在実績を並べたサマリーカードを追加。
-
-**表示内容**（各スタッフまたは自分について）：
-- KPI項目名
-- 目標値
-- 現在実績
-- 達成率（%）＋プログレスバー（100%=緑、80%以上=黄、未満=赤）
-- 月末着地予測（現実績 ÷ 経過日数 × 月日数）
-
-**実装方針**：
-- 個人ダッシュボード（`dashboardPage()`）のスタッフ自身ビューに追加
-- 管理者はチームダッシュボード（`teamPage()`）に全スタッフ分サマリー表示
-- 既存の `sumKpi(si, k)` / `gData()[si][k]` / `LAST_D` / `DAYS` を使用
-- `elapsed = DAYS ? Math.round(LAST_D/DAYS*100) : 0` で月経過割合取得済み
-- 予測 = `Math.round(sumKpi(si,k) / LAST_D * DAYS)`（LAST_D > 0 の場合）
+- 目標の複数月トレンドグラフ（未着手）
+- ファネル下流の0偏り / 期間ナビの年範囲ハードコード（見送り中）
+- パスワードの平文保存（管理者確認要件で見送り中）
 
 ---
 
 ## 今セッション（2026-06-18）で完了した実装
+
+### アラートボタン＋目標・着地予測（`kpi_system.html`）✅
+- `alertsPanelHTML()` の `active.map` 内：`a.msg.includes('残業')` → 「申請」ボタン（`state.page='attendance'`へ遷移）
+- `alertsPanelHTML()` の `active.map` 内：`a.msg.includes('KPI達成率')` → 「KPI確認」ボタン（`state.page='kpi'; state.kpiTab='rate'`へ遷移）
+- `dashboardPage()` 個人ビューの「全KPI達成状況」カード：各行に「月末予測」列を追加（`Math.round(t/LAST_D*DAYS)`、LAST_D=0時は「-」。100%以上=緑、80%以上=黄、未満=赤）
+- `teamPage()` のアラートパネル直下：「目標 vs 着地予測」カード追加（コール数・アプローチ数・契約数・クロージング数の4KPIで全スタッフ分を表形式表示）
 
 ### CRM拡張（`crm_system.html`）✅
 - `deal.memo`（商談メモ）：dealModal に追加、案件一覧に1行プレビュー表示

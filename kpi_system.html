@@ -2531,14 +2531,24 @@ function dashboardPage(){
   <!-- 全KPI達成状況（リアルタイム更新対象） -->
   <div class="card">
     <div class="section-title">全KPI達成状況 — <span id="dash-name">${STAFF_LIST[si]}</span></div>
+    <div style="display:flex;align-items:center;gap:4px;padding:0 0 6px;border-bottom:2px solid var(--border);font-size:11px;color:var(--text-secondary)">
+      <div style="width:130px;flex-shrink:0"></div>
+      <div style="flex:1"></div>
+      <div style="width:44px;text-align:right;flex-shrink:0">達成率</div>
+      <div style="width:60px;text-align:right;flex-shrink:0">実/目標</div>
+      <div style="width:56px;text-align:right;flex-shrink:0">月末予測</div>
+    </div>
     <div id="dash-kpi-bars">
       ${KPI_ACT.map(k=>{
         const t=sumKpi(si,k);const g=gData()[si][k]||1;const p=Math.min(100,Math.round(t/g*100));const c=p>=100?'#1D9E75':p>=70?'#BA7517':'#D85A30';
+        const proj=LAST_D>0?Math.round(t/LAST_D*DAYS):'-';
+        const projC=LAST_D>0&&g?(proj>=g?'#1D9E75':proj>=g*0.8?'#BA7517':'#D85A30'):'var(--text-secondary)';
         return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)" id="dash-bar-${k.replace(/[^\w]/g,'_')}">
           <div style="width:130px;font-size:12px;flex-shrink:0">${k}</div>
           <div style="flex:1"><div class="progress-bar" style="height:6px"><div class="progress-fill" id="dash-prog-${k.replace(/[^\w]/g,'_')}" style="width:${p}%;background:${c}"></div></div></div>
           <div style="font-size:12px;color:${c};width:44px;text-align:right;font-weight:600" id="dash-pct-${k.replace(/[^\w]/g,'_')}">${p}%</div>
           <div class="tip" style="width:60px;text-align:right" id="dash-val-${k.replace(/[^\w]/g,'_')}">${t}/${g}</div>
+          <div style="font-size:12px;color:${projC};width:56px;text-align:right;font-weight:600">→${proj}</div>
         </div>`;}).join('')}
     </div>
   </div>
@@ -2746,6 +2756,8 @@ function alertsPanelHTML(){
       <span class="chip" style="background:${a.lv==='danger'?'var(--bg-danger)':'var(--bg-warning)'};color:${a.lv==='danger'?'var(--text-danger)':'var(--text-warning)'};flex-shrink:0">${a.lv==='danger'?'要対応':'注意'}</span>
       <span style="font-weight:600;width:88px;flex-shrink:0">${esc(a.s)}</span>
       <span style="flex:1">${a.msg}</span>
+      ${a.msg.includes('残業')?`<button class="btn btn-sm btn-primary" onclick="state.page='attendance';render();" style="font-size:11px;flex-shrink:0"><i class="ti ti-send"></i> 申請</button>`:''}
+      ${a.msg.includes('KPI達成率')?`<button class="btn btn-sm" onclick="state.page='kpi';state.kpiTab='rate';render();" style="font-size:11px;flex-shrink:0;background:#185FA5;color:#fff"><i class="ti ti-chart-bar"></i> KPI確認</button>`:''}
       <button class="btn btn-sm" data-ack-key="${esc(a.key)}" style="font-size:11px;color:var(--text-secondary);flex-shrink:0"><i class="ti ti-check"></i> 確認済み</button>
     </div>`).join('')}
     ${acked.length?`<div class="tip" style="margin-top:6px"><i class="ti ti-eye-off" style="font-size:12px"></i> 確認済み ${acked.length}件を非表示中</div>`:''}
@@ -2755,8 +2767,34 @@ function teamPage(){
   const kpi=state.teamKpi;
   const staffVals=STAFF_LIST.map((s,i)=>({name:s,val:sumKpi(i,kpi),goal:gData()[i][kpi]||1}));
   const maxVal=Math.max(...staffVals.map(s=>s.val),1);
+  const projKpis=['コール数','アプローチ数','契約数','クロージング数'];
   return `
   ${alertsPanelHTML()}
+  <div class="card" style="margin-bottom:12px">
+    <div class="section-title" style="margin-bottom:10px">目標 vs 着地予測 — ${Y}年${M+1}月（${LAST_D}日時点）</div>
+    <div class="kpi-table-wrap"><table class="kpi-table">
+      <thead><tr>
+        <th class="row-header">担当者</th>
+        ${projKpis.map(k=>`<th style="white-space:nowrap;text-align:center">${k}</th>`).join('')}
+      </tr></thead>
+      <tbody>${STAFF_LIST.map((s,i)=>`<tr>
+        <td class="row-header">${s}</td>
+        ${projKpis.map(k=>{
+          const t=sumKpi(i,k);const g=gData()[i][k]||0;
+          const p=g?Math.min(100,Math.round(t/g*100)):0;
+          const proj=LAST_D>0&&g?Math.round(t/LAST_D*DAYS):'-';
+          const c=g?(p>=100?'#1D9E75':p>=80?'#BA7517':'#D85A30'):'var(--text-secondary)';
+          const pc=LAST_D>0&&g?(proj>=g?'#1D9E75':proj>=g*0.8?'#BA7517':'#D85A30'):'var(--text-secondary)';
+          const bar=g?`<div class="progress-bar" style="height:4px;margin:3px 0"><div class="progress-fill" style="width:${p}%;background:${c}"></div></div>`:'';
+          return `<td style="text-align:center;min-width:80px">
+            <span style="font-size:12px;font-weight:700;color:${c}">${g?p+'%':'未設定'}</span>
+            ${bar}
+            <span class="tip" style="font-size:10px">${t}/${g||'-'}</span>
+            <span style="font-size:11px;color:${pc};display:block;font-weight:600">→${proj}</span>
+          </td>`;}).join('')}
+      </tr>`).join('')}</tbody>
+    </table></div>
+  </div>
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
     <span style="font-size:13px;color:var(--text-secondary)">KPI：</span>
     ${['コール数','アプローチ数','契約数','クロージング数'].map(k=>`<button class="toggle-btn ${kpi===k?'active':''}" data-tkpi="${k}">${k}</button>`).join('')}

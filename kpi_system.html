@@ -298,7 +298,8 @@ let state={
   proxyStaff:0,proxyStatus:{},proxyLog:[],proxyWorkStart:{},proxyBreakStart:{},proxyTotalBreak:{},
   correctionLog:[{date:'06/09',staff:'田中 一郎',content:'出勤時刻 → 08:50',reason:'端末故障'}],
   histStaff:0,histTab:'daily',
-  summaryStaff:0 // 業績サマリーページ専用スタッフ選択（'total'|数値）
+  summaryStaff:0, // 業績サマリーページ専用スタッフ選択（'total'|数値）
+  sharedMemo:{text:'',by:null,byName:'',at:null} // 全員共有メモ帳
 };
 
 // ランダム整数（min以上max以下）
@@ -921,6 +922,7 @@ function render(){
   if(state.page==='summary')bindSummary();
   if(state.page==='team')bindTeam();
   if(state.page==='timeline')bindTimeline();
+  if(state.page==='memo')bindMemo();
   if(state.page==='admin')bindAdmin();
   startClock();
 }
@@ -1050,8 +1052,9 @@ function appHTML(){
     {id:'team',icon:'ti-users',label:'チーム比較'},
     {id:'summary',icon:'ti-layout-dashboard',label:'業績サマリー'},
     {id:'timeline',icon:'ti-chart-gantt',label:'着地確認'},
+    {id:'memo',icon:'ti-notebook',label:'メモ帳'},
   ];
-  const pageTitles={attendance:'出退勤打刻',history:'出勤履歴',kpi:'KPI入力',timeslot:'時間帯集計',cc:'コールセンター指標',report:'チャット報告生成',dashboard:'個人ダッシュボード',team:'チームダッシュボード',summary:'業績サマリー',timeline:'着地タイムライン',admin:'管理者画面'};
+  const pageTitles={attendance:'出退勤打刻',history:'出勤履歴',kpi:'KPI入力',timeslot:'時間帯集計',cc:'コールセンター指標',report:'チャット報告生成',dashboard:'個人ダッシュボード',team:'チームダッシュボード',summary:'業績サマリー',timeline:'着地タイムライン',memo:'チームメモ帳',admin:'管理者画面'};
   return `<div class="app">
     <div class="nav-backdrop" id="nav-backdrop"></div>
     <div class="sidebar">
@@ -1126,6 +1129,7 @@ function pageContent(){
   if(state.page==='team')return teamPage();
   if(state.page==='summary')return summaryPage();
   if(state.page==='timeline')return timelinePage();
+  if(state.page==='memo')return memoPage();
   if(state.page==='admin')return adminPage();
   return '';
 }
@@ -2849,6 +2853,90 @@ function bindTimeline(){
 }
 
 /* ===== SUMMARY（業績サマリー：アウトバウンド＋インバウンド統合） ===== */
+/* ===== MEMO ===== */
+const SENSITIVE_RULES=[
+  {re:/0[789]0[-\s]\d{4}[-\s]\d{4}|0\d{1,4}[-\s]\d{1,4}[-\s]\d{3,4}/,label:'電話番号'},
+  {re:/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/,label:'メールアドレス'},
+  {re:/〒\s*\d{3}[-‐]\d{4}/,label:'郵便番号'},
+  {re:/\d{4}[- ]\d{4}[- ]\d{4}[- ]\d{3,4}/,label:'クレジットカード番号'},
+  {re:/マイナンバー|個人番号/,label:'マイナンバー・個人番号'},
+  {re:/(?:口座|銀行)\s*番号|振込先\s*口座/,label:'口座番号情報'},
+  {re:/パスワード\s*[:：].{1,30}|password\s*[:=].{1,30}/i,label:'パスワード記述'},
+  {re:/社会保険\s*番号|保険証\s*番号/,label:'社会保険番号'},
+];
+function detectSensitive(text){
+  return SENSITIVE_RULES.filter(r=>r.re.test(text)).map(r=>r.label);
+}
+function memoPage(){
+  const m=state.sharedMemo||{text:'',by:null,byName:'',at:null};
+  const updatedInfo=m.at?`最終更新：${new Date(m.at).toLocaleString('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})} by ${esc(m.byName||'不明')}`:'まだ保存されていません';
+  const hits=detectSensitive(m.text||'');
+  return `<div class="card" style="max-width:720px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <i class="ti ti-notebook" style="color:#185FA5;font-size:18px"></i>
+      <span style="font-size:14px;font-weight:700">チームメモ帳</span>
+      <span class="tip" style="margin-left:auto;font-size:11px"><i class="ti ti-users"></i> 全スタッフ共有</span>
+    </div>
+    <div style="font-size:11px;color:var(--text-secondary);margin-bottom:14px">${updatedInfo}</div>
+
+    <textarea id="memo-text" style="width:100%;min-height:320px;border:1.5px solid var(--border);border-radius:var(--radius-md);padding:12px;font-size:13px;line-height:1.7;resize:vertical;outline:none;font-family:inherit;color:var(--text-primary);background:var(--card)" placeholder="チーム共有のメモを自由に記入できます。&#10;&#10;【注意】電話番号・メールアドレス・マイナンバーなど個人情報を含む内容は保存できません。">${esc(m.text||'')}</textarea>
+
+    <div id="memo-warn" style="display:${hits.length?'block':'none'};margin-top:10px;padding:10px 12px;background:var(--bg-danger);color:var(--text-danger);border-radius:var(--radius);font-size:12px">
+      <i class="ti ti-shield-exclamation"></i> <b>保存できません</b>：以下のセンシティブな情報が検出されました<br>
+      <ul style="margin:6px 0 0 18px">${hits.map(h=>`<li>${esc(h)}</li>`).join('')}</ul>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap">
+      <button id="memo-save" class="btn btn-primary" ${hits.length?'disabled':''} style="${hits.length?'opacity:.45;cursor:not-allowed':''}"><i class="ti ti-device-floppy"></i> 保存する</button>
+      <button id="memo-clear" class="btn" style="color:var(--text-danger)"><i class="ti ti-trash"></i> クリア</button>
+      <span class="tip" style="margin-left:auto;font-size:11px">文字数：<span id="memo-count">${(m.text||'').length}</span>字</span>
+    </div>
+
+    <div style="margin-top:16px;padding:10px 12px;background:var(--bg);border-radius:var(--radius);font-size:11px;color:var(--text-secondary);line-height:1.8">
+      <b>保存できない情報の例：</b>電話番号 / メールアドレス / 郵便番号（〒） / クレジットカード番号 / マイナンバー・個人番号 / 口座番号 / パスワード記述（「パスワード：○○」形式） / 社会保険番号
+    </div>
+  </div>`;
+}
+function bindMemo(){
+  const ta=document.getElementById('memo-text');
+  const warn=document.getElementById('memo-warn');
+  const saveBtn=document.getElementById('memo-save');
+  const countEl=document.getElementById('memo-count');
+  if(!ta)return;
+
+  ta.oninput=()=>{
+    const txt=ta.value;
+    const hits=detectSensitive(txt);
+    countEl.textContent=txt.length;
+    if(hits.length){
+      warn.style.display='block';
+      warn.innerHTML=`<i class="ti ti-shield-exclamation"></i> <b>保存できません</b>：以下のセンシティブな情報が検出されました<br><ul style="margin:6px 0 0 18px">${hits.map(h=>`<li>${esc(h)}</li>`).join('')}</ul>`;
+      saveBtn.disabled=true;saveBtn.style.opacity='.45';saveBtn.style.cursor='not-allowed';
+    }else{
+      warn.style.display='none';
+      saveBtn.disabled=false;saveBtn.style.opacity='';saveBtn.style.cursor='';
+    }
+  };
+
+  saveBtn.onclick=()=>{
+    const txt=ta.value;
+    if(detectSensitive(txt).length){toast('センシティブな情報が含まれているため保存できません','error');return;}
+    const name=state.role==='admin'?'管理者':(STAFF_LIST[state.user]||'不明');
+    state.sharedMemo={text:txt,by:state.user,byName:name,at:Date.now()};
+    saveState();
+    toast('メモを保存しました');
+    render();
+  };
+
+  const clearBtn=document.getElementById('memo-clear');
+  if(clearBtn){
+    clearBtn.onclick=()=>{
+      if(ta.value.trim()===''&&(!state.sharedMemo||!state.sharedMemo.text))return;
+      ta.value='';
+      ta.oninput();
+    };
+  }
+}
 function timelinePage(){
   const isAdmin=state.role==='admin';
   const si=isAdmin?(state.user!==null?state.user:0):state.user;

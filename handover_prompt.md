@@ -8,7 +8,7 @@
 
 ### 【次優先】未対応事項（2026-06-18時点）
 
-対象ファイル：`kpi_system.html`（現在 約3620行）
+対象ファイル：`kpi_system.html`（現在 約3737行）
 
 - 目標の複数月トレンドグラフ（未着手）
 - ファネル下流の0偏り / 期間ナビの年範囲ハードコード（見送り中）
@@ -17,6 +17,15 @@
 ---
 
 ## 今セッション（2026-06-18）で完了した実装
+
+### KGIリネーム＋着地タイムライン（2026-06-18）✅
+- `kpi_system.html`: topbarのCRMリンクを管理者専用・アイコン`ti-target`・ラベル「KGI」に変更（スタッフには完全非表示）
+- `crm_system.html`: タイトル・topbar・ログイン画面を「KGI管理」に変更。スタッフがログインするとアクセス拒否画面を表示
+- `kpi_system.html`: サイドバーに「着地確認」(id=`timeline`)ページを追加
+  - `timelinePage()` / `bindTimeline()` を追加（`summaryPage()`の直前）
+  - スタッフ：自分の全KPI_ACTをタイムラインバーで表示（実績・目標ペース・今日線・→月末予測%・バッジ）
+  - 管理者：KPI切替 ＋ 全スタッフ一覧ビュー（チーム合計行付き）／特定スタッフ全KPIビューを切替
+  - state: `tlKpi`（選択KPI）/ `tlView`（'staff'|'self'）/ `tlStaff`（スタッフindex）
 
 ### アラートボタン＋目標・着地予測（`kpi_system.html`）✅
 - `alertsPanelHTML()` の `active.map` 内：`a.msg.includes('残業')` → 「申請」ボタン（`state.page='attendance'`へ遷移）

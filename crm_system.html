@@ -122,6 +122,12 @@ function loadKpiShared(){
       STAFF_LIST=kpiState._staffList;
   }catch(e){}
 }
+function sumKpiCRM(si,k){
+  if(!kpiState||!kpiState.kpiData)return null;
+  const pd=kpiState.kpiData[pKey()]||{};
+  if(si==='all')return STAFF_LIST.reduce((s,_,i)=>s+Object.values(pd[i]||{}).reduce((a,d)=>a+(d[k]||0),0),0);
+  return Object.values(pd[si]||{}).reduce((s,d)=>s+(d[k]||0),0);
+}
 
 /* ===== STATE ===== */
 let state={
@@ -276,6 +282,10 @@ function dashboardPage(){
   const recentActs=[...state.activities].filter(a=>si==='all'||a.staffSi===si)
     .sort((a,b)=>new Date(b.date)-new Date(a.date)||b.createdAt-a.createdAt).slice(0,6);
 
+  const kpiContract=sumKpiCRM(si,'契約数');
+  const kpiCall=sumKpiCRM(si,'コール数');
+  const kpiApproach=sumKpiCRM(si,'アプローチ数');
+  const kpiClose=sumKpiCRM(si,'クロージング数');
   const gridCls=isAdmin()?'grid-4':'grid-3';
   return `
   <div class="${gridCls}" style="margin-bottom:14px">
@@ -296,6 +306,32 @@ function dashboardPage(){
       <div class="stat-label">月末着地予測（金額）</div>
     </div>`:''}
   </div>
+
+  ${kpiContract!=null?`<div class="card" style="margin-bottom:12px;border-left:3px solid #185FA5">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+      <i class="ti ti-chart-bar" style="color:#185FA5"></i>
+      <span style="font-size:13px;font-weight:700;color:#185FA5">KPI実績参照（${REAL_Y}年${REAL_M+1}月）</span>
+      <a href="kpi_system.html" style="margin-left:auto;font-size:11px;color:var(--text-secondary);text-decoration:none"><i class="ti ti-external-link"></i> KPI管理へ</a>
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap">
+      <div style="text-align:center;min-width:70px">
+        <div style="font-size:20px;font-weight:800;color:#185FA5">${kpiContract}<span style="font-size:12px;font-weight:500">件</span></div>
+        <div style="font-size:11px;color:var(--text-secondary)">契約数</div>
+      </div>
+      <div style="text-align:center;min-width:70px">
+        <div style="font-size:20px;font-weight:800">${kpiCall}<span style="font-size:12px;font-weight:500">件</span></div>
+        <div style="font-size:11px;color:var(--text-secondary)">コール数</div>
+      </div>
+      <div style="text-align:center;min-width:70px">
+        <div style="font-size:20px;font-weight:800">${kpiApproach}<span style="font-size:12px;font-weight:500">件</span></div>
+        <div style="font-size:11px;color:var(--text-secondary)">アプローチ数</div>
+      </div>
+      <div style="text-align:center;min-width:70px">
+        <div style="font-size:20px;font-weight:800">${kpiClose}<span style="font-size:12px;font-weight:500">件</span></div>
+        <div style="font-size:11px;color:var(--text-secondary)">クロージング数</div>
+      </div>
+    </div>
+  </div>`:''}
 
   <div class="card">
     <div class="section-title"><i class="ti ti-trending-up"></i> 月末着地予測 — ${REAL_Y}年${REAL_M+1}月</div>

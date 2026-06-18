@@ -430,14 +430,14 @@ function customerDetailPage(){
     ${myDeals.length?`<div class="table-wrap"><table class="list">
       <thead><tr><th>案件名</th><th>フェーズ</th><th>件数</th>${isAdmin()?'<th>金額</th>':''}<th>確度</th><th>クロージング予定</th><th>状態</th><th></th></tr></thead>
       <tbody>${myDeals.map(d=>`<tr>
-        <td style="font-weight:600">${esc(d.title)}</td>
+        <td style="font-weight:600">${esc(d.title)}${d.memo?`<div style="font-size:11px;color:var(--text-tertiary);margin-top:2px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.memo)}</div>`:''}</td>
         <td>${phaseChip(d.phase)}</td>
         <td>${d.count||1}件</td>
         ${isAdmin()?`<td>${fmtAmt(d.amount)}</td>`:''}
         <td>${d.probability||0}%</td>
         <td>${d.expectedCloseDate||'—'}</td>
         <td>${dealStatusChip(d.status)}</td>
-        <td><button class="btn btn-sm" data-deal-edit="${d.id}"><i class="ti ti-edit"></i></button></td>
+        <td>${d.link&&/^https?:\/\//.test(d.link)?`<a href="${esc(d.link)}" target="_blank" rel="noopener" class="btn btn-sm" title="${esc(d.link)}" style="margin-right:4px"><i class="ti ti-link"></i></a>`:''}<button class="btn btn-sm" data-deal-edit="${d.id}"><i class="ti ti-edit"></i></button></td>
       </tr>`).join('')}</tbody>
     </table></div>`:'<p class="tip">案件がありません</p>'}
   </div>
@@ -468,7 +468,7 @@ function dealsPage(){
   const dealRow=d=>{
     const c=state.customers.find(x=>x.id===d.customerId);
     return `<tr>
-      <td style="font-weight:600">${esc(d.title)}</td>
+      <td style="font-weight:600">${esc(d.title)}${d.memo?`<div style="font-size:11px;color:var(--text-tertiary);margin-top:2px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.memo)}</div>`:''}</td>
       <td><a href="#" data-cust="${d.customerId}" style="color:var(--accent);text-decoration:none">${esc(c?c.company||c.name:'—')}</a></td>
       <td>${phaseChip(d.phase)}</td>
       <td>${d.count||1}件</td>
@@ -477,7 +477,7 @@ function dealsPage(){
       <td>${d.expectedCloseDate||'—'}</td>
       <td>${esc(staffName(d.staffSi))}</td>
       <td>${dealStatusChip(d.status)}</td>
-      <td><button class="btn btn-sm" data-deal-edit="${d.id}"><i class="ti ti-edit"></i></button></td>
+      <td>${d.link&&/^https?:\/\//.test(d.link)?`<a href="${esc(d.link)}" target="_blank" rel="noopener" class="btn btn-sm" title="${esc(d.link)}" style="margin-right:4px"><i class="ti ti-link"></i></a>`:''}<button class="btn btn-sm" data-deal-edit="${d.id}"><i class="ti ti-edit"></i></button></td>
     </tr>`;
   };
 
@@ -513,6 +513,31 @@ function dealsPage(){
   </div>`;
 }
 
+/* ===== ACTIVITY CSV EXPORT ===== */
+function exportActivityCSV(){
+  const si=isAdmin()?null:mySi();
+  let acts=[...state.activities].filter(a=>si===null||a.staffSi===si);
+  const f=state.actFilter;
+  if(f.type!=='all')acts=acts.filter(a=>a.type===f.type);
+  if(f.staff!=='all'&&isAdmin())acts=acts.filter(a=>a.staffSi===parseInt(f.staff));
+  acts.sort((a,b)=>new Date(b.date)-new Date(a.date)||b.createdAt-a.createdAt);
+  function csvCell(v){const s=String(v==null?'':v);return s.includes(',')||s.includes('"')||s.includes('\n')?'"'+s.replace(/"/g,'""')+'"':s;}
+  const headers=['担当者','日付','種別','顧客名','メモ'];
+  const rows=acts.map(a=>{
+    const c=state.customers.find(x=>x.id===a.customerId);
+    const actType=ACT_TYPES.find(x=>x.id===a.type)||ACT_TYPES[3];
+    return [staffName(a.staffSi),a.date,actType.label,c?c.company||c.name:'',a.content].map(csvCell).join(',');
+  });
+  const csv='﻿'+[headers.map(csvCell).join(','),...rows].join('\r\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const el=document.createElement('a');
+  el.href=url;el.download=`活動レポート_${curMonthStr()}.csv`;
+  document.body.appendChild(el);el.click();
+  setTimeout(()=>{URL.revokeObjectURL(url);el.remove();},1000);
+  toast('CSVを出力しました');
+}
+
 /* ===== ACTIVITIES PAGE ===== */
 function activitiesPage(){
   const si=isAdmin()?null:mySi();
@@ -534,7 +559,10 @@ function activitiesPage(){
           ${STAFF_LIST.map((s,i)=>`<option value="${i}" ${f.staff==i?'selected':''}>${esc(s)}</option>`).join('')}
         </select>`:''}
       </div>
-      <button class="btn btn-primary" id="act-add-btn"><i class="ti ti-plus"></i> 活動記録</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn" id="act-csv-btn"><i class="ti ti-download"></i> CSV出力</button>
+        <button class="btn btn-primary" id="act-add-btn"><i class="ti ti-plus"></i> 活動記録</button>
+      </div>
     </div>
     <div class="table-wrap"><table class="list">
       <thead><tr><th>日付</th><th>種別</th><th>顧客</th><th>内容</th>${isAdmin()?'<th>担当者</th>':''}<th></th></tr></thead>
@@ -677,7 +705,8 @@ function dealModal(id=null,preCustId=null){
     ${isAdmin()?`<div style="margin-bottom:12px"><div class="form-label">担当営業</div><select class="select" id="dm-staff" style="width:100%">
       ${STAFF_LIST.map((s,i)=>`<option value="${i}" ${defSi===i?'selected':''}>${esc(s)}</option>`).join('')}
     </select></div>`:''}
-    <div style="margin-bottom:16px"><div class="form-label">メモ</div><textarea class="form-control" id="dm-note" rows="2">${esc(d.note||'')}</textarea></div>
+    <div style="margin-bottom:12px"><div class="form-label">関連リンク URL</div><input type="url" class="form-control" id="dm-link" placeholder="https://..." value="${esc(d.link||'')}"></div>
+    <div style="margin-bottom:16px"><div class="form-label">商談メモ</div><textarea class="form-control" id="dm-memo" rows="2">${esc(d.memo||d.note||'')}</textarea></div>
     <div style="display:flex;gap:8px;justify-content:flex-end">
       ${id?`<button class="btn" style="color:var(--text-danger);margin-right:auto" id="dm-del"><i class="ti ti-trash"></i> 削除</button>`:''}
       <button class="btn" id="dm-cancel">キャンセル</button>
@@ -756,7 +785,7 @@ function showDealModal(id=null,preCustId=null){
     const amtEl=document.getElementById('dm-amount');
     const today=`${REAL_Y}-${pad2(REAL_M+1)}-${pad2(REAL_D)}`;
     const existingClosedAt=id?state.deals.find(d=>d.id===id)?.closedAt:null;
-    const data={title,customerId:custId,count:parseInt(document.getElementById('dm-count').value)||1,amount:amtEl&&!amtEl.disabled?parseFloat(amtEl.value)||0:0,phase:document.getElementById('dm-phase').value,probability:parseInt(document.getElementById('dm-prob').value)||0,expectedCloseDate:document.getElementById('dm-close-date').value,status,staffSi,note:(document.getElementById('dm-note').value||'').trim(),closedAt:status!=='open'?(existingClosedAt||today):null};
+    const data={title,customerId:custId,count:parseInt(document.getElementById('dm-count').value)||1,amount:amtEl&&!amtEl.disabled?parseFloat(amtEl.value)||0:0,phase:document.getElementById('dm-phase').value,probability:parseInt(document.getElementById('dm-prob').value)||0,expectedCloseDate:document.getElementById('dm-close-date').value,status,staffSi,link:(document.getElementById('dm-link').value||'').trim(),memo:(document.getElementById('dm-memo').value||'').trim(),closedAt:status!=='open'?(existingClosedAt||today):null};
     if(id){const idx=state.deals.findIndex(d=>d.id===id);if(idx>=0)state.deals[idx]={...state.deals[idx],...data};toast('案件を更新しました');}
     else{state.deals.push({id:genId(),createdAt:Date.now(),...data});toast('案件を登録しました');}
     ov.remove();render();
@@ -843,6 +872,7 @@ function bindPage(){
   const cAdd=document.getElementById('cust-add-btn');if(cAdd)cAdd.onclick=()=>showCustModal();
   const dAdd=document.getElementById('deal-add-btn');if(dAdd)dAdd.onclick=()=>showDealModal();
   const aAdd=document.getElementById('act-add-btn');if(aAdd)aAdd.onclick=()=>showActModal();
+  const acsv=document.getElementById('act-csv-btn');if(acsv)acsv.onclick=exportActivityCSV;
   const dfc=document.getElementById('deal-add-from-cust');if(dfc)dfc.onclick=()=>showDealModal(null,state.selCustId);
   const afc=document.getElementById('act-add-from-cust');if(afc)afc.onclick=()=>showActModal(null,state.selCustId);
   // 編集ボタン

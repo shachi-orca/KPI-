@@ -849,6 +849,11 @@ function showActModal(id=null,preCustId=null){
 /* ===== RENDER ===== */
 function render(){
   loadKpiShared();
+  // KPIシステムの管理者セッションをCRMに自動同期（別ログインを不要にする）
+  if(kpiState&&kpiState.role==='admin'&&state.role!=='admin'){
+    state.role='admin';state.user=null;
+    if(state.page==='login')state.page='dashboard';
+  }
   saveState();
   const app=document.getElementById('app');
   if(!state.role||state.page==='login'){

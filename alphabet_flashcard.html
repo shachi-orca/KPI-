@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>アルファベットフラッシュカード</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: #f0f0f0;
+            overflow: hidden;
+            font-family: sans-serif;
+        }
+        #card {
+            width: 80vw;
+            height: 60vh;
+            background: white;
+            border-radius: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+            touch-action: none;
+            transition: transform 0.3s;
+            position: relative;
+        }
+        .letter-display {
+            font-size: 13vh;
+            font-weight: bold;
+            color: #333;
+            line-height: 1;
+            margin-bottom: 4px;
+            font-family: 'Georgia', 'Times New Roman', serif;
+        }
+        .letter-small {
+            font-size: 6vh;
+            color: #999;
+            font-family: 'Georgia', 'Times New Roman', serif;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        .word-display {
+            font-size: 3vh;
+            color: #555;
+            margin-top: 8px;
+            text-align: center;
+        }
+        .hint {
+            color: #888;
+            font-size: 0.9em;
+            margin-top: 10px;
+            text-align: center;
+            white-space: pre-line;
+        }
+        .review-badge {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: #ff6b6b;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.8em;
+            display: none;
+        }
+        .mode-badge {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: #4ecdc4;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.8em;
+            display: none;
+        }
+        .phonetic {
+            font-size: 2vh;
+            color: #888;
+            margin-top: 4px;
+            font-style: italic;
+        }
+        .reset-btn {
+            position: absolute;
+            bottom: 15px;
+            right: 15px;
+            background: #6c757d;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 15px;
+            font-size: 0.85em;
+            border: none;
+            cursor: pointer;
+            z-index: 100;
+        }
+        .reset-btn:hover { background: #5a6268; }
+        .reset-btn:active { transform: scale(0.95); }
+
+        .sound-btn {
+            position: absolute;
+            bottom: 15px;
+            left: 15px;
+            background: #4a90d9;
+            color: white;
+            padding: 8px 14px;
+            border-radius: 15px;
+            font-size: 0.85em;
+            border: none;
+            cursor: pointer;
+            z-index: 100;
+            display: none;
+        }
+        .sound-btn:hover { background: #357abd; }
+        .sound-btn:active { transform: scale(0.95); }
+
+        .progress-bar-wrap {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 6px;
+            background: #eee;
+            border-radius: 20px 20px 0 0;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background: #4ecdc4;
+            transition: width 0.3s;
+        }
+
+        /* スタート画面のモード選択 */
+        .start-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
+        .start-title {
+            font-size: 4vh;
+            font-weight: bold;
+            color: #333;
+        }
+        .start-sub {
+            font-size: 2.2vh;
+            color: #888;
+        }
+        .mode-btn {
+            padding: 12px 28px;
+            border-radius: 30px;
+            border: none;
+            font-size: 2.2vh;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.15s;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+        }
+        .mode-btn:active { transform: scale(0.95); }
+        .btn-order {
+            background: #4ecdc4;
+            color: white;
+        }
+        .btn-shuffle {
+            background: #ff9f43;
+            color: white;
+        }
+    </style>
+    <base target="_blank">
+</head>
+<body>
+
+<div id="card">
+    <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar"></div></div>
+    <div class="mode-badge" id="modeBadge">復習モード</div>
+    <div class="review-badge" id="reviewBadge">復習: 0</div>
+
+    <!-- スタート画面 -->
+    <div class="start-screen" id="startScreen">
+        <div class="start-title">📝 アルファベット</div>
+        <div class="start-sub">学習モードを選んでください</div>
+        <button class="mode-btn btn-order" onclick="startGame(false)">A→Z 順番に</button>
+        <button class="mode-btn btn-shuffle" onclick="startGame(true)">🔀 シャッフル</button>
+    </div>
+
+    <!-- カード本体（非表示で開始） -->
+    <div id="cardContent" style="display:none; flex-direction:column; align-items:center; justify-content:center; width:100%;">
+        <div class="letter-display" id="letterDisplay"></div>
+        <div class="letter-small" id="letterSmall"></div>
+        <div class="phonetic" id="phoneticText" style="display:none;"></div>
+        <div class="word-display" id="wordDisplay" style="display:none;"></div>
+        <p class="hint" id="hintText"></p>
+    </div>
+
+    <button class="sound-btn" id="soundBtn" onclick="speakCurrent()">🔊 読む</button>
+    <button class="reset-btn" id="resetBtn" onclick="resetAll()">🔄 リセット</button>
+</div>
+
+<script>
+    const alphabetData = [
+        { letter: "A", word: "Apple",     phonetic: "/ˈæp.əl/",      japanese: "りんご" },
+        { letter: "B", word: "Ball",      phonetic: "/bɔːl/",         japanese: "ボール" },
+        { letter: "C", word: "Cat",       phonetic: "/kæt/",          japanese: "猫" },
+        { letter: "D", word: "Dog",       phonetic: "/dɒɡ/",          japanese: "犬" },
+        { letter: "E", word: "Elephant",  phonetic: "/ˈel.ɪ.fənt/",   japanese: "象" },
+        { letter: "F", word: "Fish",      phonetic: "/fɪʃ/",          japanese: "魚" },
+        { letter: "G", word: "Giraffe",   phonetic: "/dʒɪˈrɑːf/",     japanese: "キリン" },
+        { letter: "H", word: "House",     phonetic: "/haʊs/",         japanese: "家" },
+        { letter: "I", word: "Ice",       phonetic: "/aɪs/",          japanese: "氷" },
+        { letter: "J", word: "Jelly",     phonetic: "/ˈdʒel.i/",      japanese: "ゼリー" },
+        { letter: "K", word: "King",      phonetic: "/kɪŋ/",          japanese: "王様" },
+        { letter: "L", word: "Lion",      phonetic: "/ˈlaɪ.ən/",      japanese: "ライオン" },
+        { letter: "M", word: "Monkey",    phonetic: "/ˈmʌŋ.ki/",      japanese: "猿" },
+        { letter: "N", word: "Nest",      phonetic: "/nest/",         japanese: "巣" },
+        { letter: "O", word: "Orange",    phonetic: "/ˈɒr.ɪndʒ/",     japanese: "オレンジ" },
+        { letter: "P", word: "Penguin",   phonetic: "/ˈpeŋ.ɡwɪn/",    japanese: "ペンギン" },
+        { letter: "Q", word: "Queen",     phonetic: "/kwiːn/",        japanese: "女王" },
+        { letter: "R", word: "Rabbit",    phonetic: "/ˈræb.ɪt/",      japanese: "ウサギ" },
+        { letter: "S", word: "Sun",       phonetic: "/sʌn/",          japanese: "太陽" },
+        { letter: "T", word: "Tiger",     phonetic: "/ˈtaɪ.ɡər/",     japanese: "トラ" },
+        { letter: "U", word: "Umbrella",  phonetic: "/ʌmˈbrel.ə/",    japanese: "傘" },
+        { letter: "V", word: "Violin",    phonetic: "/ˌvaɪəˈlɪn/",    japanese: "バイオリン" },
+        { letter: "W", word: "Whale",     phonetic: "/weɪl/",         japanese: "クジラ" },
+        { letter: "X", word: "Xylophone", phonetic: "/ˈzaɪ.lə.foʊn/", japanese: "木琴" },
+        { letter: "Y", word: "Yo-yo",     phonetic: "/ˈjoʊ.joʊ/",     japanese: "ヨーヨー" },
+        { letter: "Z", word: "Zebra",     phonetic: "/ˈzeb.rə/",      japanese: "シマウマ" }
+    ];
+
+    let deck = [];
+    let currentIndex = 0;
+    let isRevealed = false;
+    let isReviewMode = false;
+    let reviewList = [];
+    let currentReviewIndex = 0;
+    let reviewAgainList = [];
+    let isFinishedState = false;
+
+    const card = document.getElementById('card');
+    const startScreen = document.getElementById('startScreen');
+    const cardContent = document.getElementById('cardContent');
+    const letterDisplay = document.getElementById('letterDisplay');
+    const letterSmall = document.getElementById('letterSmall');
+    const phoneticText = document.getElementById('phoneticText');
+    const wordDisplay = document.getElementById('wordDisplay');
+    const hintText = document.getElementById('hintText');
+    const reviewBadge = document.getElementById('reviewBadge');
+    const modeBadge = document.getElementById('modeBadge');
+    const progressBar = document.getElementById('progressBar');
+    const soundBtn = document.getElementById('soundBtn');
+
+    const hammer = new Hammer(card);
+
+    function shuffle(arr) {
+        const a = arr.slice();
+        for (let i = a.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [a[i], a[j]] = [a[j], a[i]];
+        }
+        return a;
+    }
+
+    function startGame(doShuffle) {
+        deck = doShuffle ? shuffle(alphabetData) : alphabetData.slice();
+        currentIndex = 0;
+        isRevealed = false;
+        isFinishedState = false;
+        startScreen.style.display = 'none';
+        cardContent.style.display = 'flex';
+        soundBtn.style.display = 'block';
+        updateCard();
+    }
+
+    hammer.on('tap', () => {
+        if (startScreen.style.display !== 'none') return;
+
+        if (isFinishedState) {
+            if (reviewList.length > 0) {
+                startReviewMode();
+            } else {
+                resetAll();
+            }
+            return;
+        }
+
+        if (!isRevealed) {
+            isRevealed = true;
+            const data = getCurrentData();
+            wordDisplay.innerText = data.word + "（" + data.japanese + "）";
+            phoneticText.innerText = data.phonetic;
+            phoneticText.style.display = 'block';
+            wordDisplay.style.display = 'block';
+            hintText.innerText = "← 左スワイプ: もう一度復習\n右スワイプ: 覚えた！→";
+            speakWord(data.word);
+        }
+    });
+
+    hammer.on('swipeleft', () => {
+        if (!isRevealed || isFinishedState) return;
+        const data = getCurrentData();
+        if (isReviewMode) reviewAgainList.push(data);
+        else reviewList.push(data);
+        animateSwipe('left');
+        updateReviewBadge();
+    });
+
+    hammer.on('swiperight', () => {
+        if (!isRevealed || isFinishedState) return;
+        animateSwipe('right');
+    });
+
+    function animateSwipe(direction) {
+        const x = direction === 'left' ? -120 : 120;
+        const rot = direction === 'left' ? -12 : 12;
+        card.style.transform = `translateX(${x}px) rotate(${rot}deg)`;
+        setTimeout(() => {
+            card.style.transform = 'translateX(0) rotate(0)';
+            nextCard();
+        }, 200);
+    }
+
+    function getCurrentData() {
+        return isReviewMode ? reviewList[currentReviewIndex] : deck[currentIndex];
+    }
+
+    function nextCard() {
+        if (isReviewMode) {
+            currentReviewIndex++;
+            if (currentReviewIndex >= reviewList.length) { finishReview(); return; }
+        } else {
+            currentIndex++;
+            if (currentIndex >= deck.length) { finishNormal(); return; }
+        }
+        isRevealed = false;
+        updateCard();
+    }
+
+    function updateCard() {
+        const data = getCurrentData();
+        letterDisplay.innerText = data.letter;
+        letterSmall.innerText = data.letter.toLowerCase();
+        phoneticText.style.display = 'none';
+        wordDisplay.style.display = 'none';
+        wordDisplay.innerText = "";
+        phoneticText.innerText = "";
+        hintText.innerText = "タップして単語を表示";
+        card.style.background = 'white';
+        updateReviewBadge();
+        updateProgress();
+    }
+
+    function updateProgress() {
+        const total = isReviewMode ? reviewList.length : deck.length;
+        const current = isReviewMode ? currentReviewIndex : currentIndex;
+        progressBar.style.width = (current / total * 100) + '%';
+    }
+
+    function updateReviewBadge() {
+        if (isReviewMode) {
+            reviewBadge.innerText = `残り: ${reviewList.length - currentReviewIndex}`;
+        } else {
+            reviewBadge.innerText = `復習: ${reviewList.length}`;
+        }
+        reviewBadge.style.display = 'block';
+    }
+
+    function finishNormal() {
+        isFinishedState = true;
+        progressBar.style.width = '100%';
+        letterDisplay.innerText = "🎉";
+        letterSmall.innerText = "";
+        phoneticText.style.display = 'none';
+        wordDisplay.style.display = 'none';
+        reviewBadge.style.display = 'none';
+
+        if (reviewList.length > 0) {
+            hintText.innerText = `復習が ${reviewList.length} 個あります\nタップして復習モード開始`;
+            card.style.background = '#fff3cd';
+        } else {
+            hintText.innerText = "全問正解！\nタップして最初から";
+            card.style.background = '#d4edda';
+        }
+    }
+
+    function startReviewMode() {
+        isFinishedState = false;
+        isReviewMode = true;
+        currentReviewIndex = 0;
+        reviewAgainList = [];
+        isRevealed = false;
+        modeBadge.style.display = 'block';
+        updateCard();
+    }
+
+    function finishReview() {
+        isFinishedState = true;
+        progressBar.style.width = '100%';
+        letterDisplay.innerText = "🎉";
+        letterSmall.innerText = "";
+        phoneticText.style.display = 'none';
+        wordDisplay.style.display = 'none';
+        modeBadge.style.display = 'none';
+        reviewBadge.style.display = 'none';
+
+        if (reviewAgainList.length > 0) {
+            reviewList = reviewAgainList.slice();
+            currentReviewIndex = 0;
+            reviewAgainList = [];
+            hintText.innerText = `まだ ${reviewList.length} 個覚えてない...\nタップしてもう一度復習`;
+            card.style.background = '#f8d7da';
+        } else {
+            hintText.innerText = "完璧！\nタップして最初から";
+            card.style.background = '#d4edda';
+            isReviewMode = false;
+        }
+    }
+
+    function resetAll() {
+        deck = [];
+        currentIndex = 0;
+        isRevealed = false;
+        isReviewMode = false;
+        isFinishedState = false;
+        reviewList = [];
+        currentReviewIndex = 0;
+        reviewAgainList = [];
+        modeBadge.style.display = 'none';
+        reviewBadge.style.display = 'none';
+        soundBtn.style.display = 'none';
+        progressBar.style.width = '0%';
+        letterDisplay.innerText = "";
+        letterSmall.innerText = "";
+        phoneticText.style.display = 'none';
+        wordDisplay.style.display = 'none';
+        hintText.innerText = "";
+        card.style.background = 'white';
+        cardContent.style.display = 'none';
+        startScreen.style.display = 'flex';
+    }
+
+    function speakWord(text) {
+        if (!window.speechSynthesis) return;
+        window.speechSynthesis.cancel();
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.lang = 'en-US';
+        utter.rate = 0.85;
+        window.speechSynthesis.speak(utter);
+    }
+
+    function speakCurrent() {
+        if (isFinishedState || !isRevealed) {
+            const data = getCurrentData();
+            if (data) speakWord(data.letter);
+        } else {
+            const data = getCurrentData();
+            if (data) speakWord(data.word);
+        }
+    }
+</script>
+</body>
+</html>

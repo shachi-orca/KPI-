@@ -746,6 +746,11 @@ function computeAlerts(){
       const nmk=nextMonthKey();const pd=((state.shiftPrefs||{})[nmk]||{})[si];
       if(!pd||!pd.submitted)alerts.push({lv:'warn',s,msg:`${nextMonthLabel()}シフト希望が未提出（締切：今月${state.shiftDeadline||20}日）`});
     }
+    // KPI達成率80%未満アラート（月経過30%以上・当月のみ）
+    if(IS_CURRENT&&elapsed>=30){
+      const lowKpis=KPI_ACT.filter(k=>{const g=gData()[si][k];return g>0&&(sumKpi(si,k)/g*100)<80;});
+      if(lowKpis.length>0)alerts.push({lv:'warn',s,msg:`KPI達成率80%未満：${lowKpis.join('・')}`});
+    }
   });
   return alerts;
 }
@@ -2107,6 +2112,31 @@ function timeslotPage(){
     </table></div>`;
   }
 
+  // ===== 個人表示 × 日別履歴 =====
+  if(!isTotal && tsView==='daily'){
+    const days=Array.from({length:DAYS},(_,i)=>i+1);
+    return toolBar+`
+    <div class="kpi-table-wrap"><table class="kpi-table">
+      <thead><tr>
+        <th class="row-header">KPI項目</th>
+        ${days.map(d=>`<th ${d===TODAY_D?'style="background:#dceeff"':''}>${d}日</th>`).join('')}
+        <th style="background:#E6F1FB;color:#185FA5">月計</th>
+      </tr></thead>
+      <tbody>
+        ${KPI_ACT.map(k=>`<tr>
+          <td class="row-header">${k}</td>
+          ${days.map(d=>{const v=((kData()[si]||{})[d]||{})[k]||0;return `<td class="${d===TODAY_D?'today':''}" style="${v>0?'font-weight:500':'color:var(--text-tertiary)'}">${v||'—'}</td>`;}).join('')}
+          <td class="total" style="background:#E6F1FB;color:#185FA5;font-weight:700">${sumKpi(si,k)}</td>
+        </tr>`).join('')}
+      </tbody>
+      <tfoot><tr style="background:#E6F1FB">
+        <td class="row-header" style="font-weight:700;color:#185FA5">日別合計</td>
+        ${days.map(d=>{const v=KPI_ACT.reduce((a,k)=>a+(((kData()[si]||{})[d]||{})[k]||0),0);return `<td style="font-weight:700;color:#185FA5;${d===TODAY_D?'background:#dceeff':''}">${v||'—'}</td>`;}).join('')}
+        <td style="font-weight:700;color:#185FA5">${KPI_ACT.reduce((a,k)=>a+sumKpi(si,k),0)}</td>
+      </tr></tfoot>
+    </table></div>`;
+  }
+
   // ===== 個人表示 × 率指標 =====
   if(tsTab==='rate'){
     const slotActVals=slots.map((_,slotIdx)=>{
@@ -2699,7 +2729,8 @@ function bindDashboard(){
 /* ===== TEAM ===== */
 // アラートパネル（未達・欠勤・放棄率・PW未変更）
 function alertsPanelHTML(){
-  const al=computeAlerts().map(a=>({...a,key:`${pKey()}_${a.s}_${a.msg}`}));
+  let al=computeAlerts().map(a=>({...a,key:`${pKey()}_${a.s}_${a.msg}`}));
+  if(state.role!=='admin'){const myName=STAFF_LIST[state.user]||'';al=al.filter(a=>a.s===myName);}
   if(!al.length)return `<div class="card" style="border-left:4px solid #1D9E75"><div style="font-size:13px;font-weight:600;color:#0F6E56"><i class="ti ti-circle-check"></i> アラートはありません（${Y}年${M+1}月）</div></div>`;
   const ack=state.alertAck||{};
   const active=al.filter(a=>!ack[a.key]);

@@ -920,6 +920,7 @@ function render(){
   if(state.page==='dashboard')bindDashboard();
   if(state.page==='summary')bindSummary();
   if(state.page==='team')bindTeam();
+  if(state.page==='timeline')bindTimeline();
   if(state.page==='admin')bindAdmin();
   startClock();
 }
@@ -1048,8 +1049,9 @@ function appHTML(){
     {id:'dashboard',icon:'ti-chart-line',label:'個人ダッシュ'},
     {id:'team',icon:'ti-users',label:'チーム比較'},
     {id:'summary',icon:'ti-layout-dashboard',label:'業績サマリー'},
+    {id:'timeline',icon:'ti-chart-gantt',label:'着地確認'},
   ];
-  const pageTitles={attendance:'出退勤打刻',history:'出勤履歴',kpi:'KPI入力',timeslot:'時間帯集計',cc:'コールセンター指標',report:'チャット報告生成',dashboard:'個人ダッシュボード',team:'チームダッシュボード',summary:'業績サマリー',admin:'管理者画面'};
+  const pageTitles={attendance:'出退勤打刻',history:'出勤履歴',kpi:'KPI入力',timeslot:'時間帯集計',cc:'コールセンター指標',report:'チャット報告生成',dashboard:'個人ダッシュボード',team:'チームダッシュボード',summary:'業績サマリー',timeline:'着地タイムライン',admin:'管理者画面'};
   return `<div class="app">
     <div class="nav-backdrop" id="nav-backdrop"></div>
     <div class="sidebar">
@@ -1073,7 +1075,7 @@ function appHTML(){
         <div class="topbar-title">${pageTitles[state.page]||''}</div>
         <div class="topbar-right">
           <span id="live-clock" style="font-size:13px;color:var(--text-secondary);font-family:var(--font-mono)">${state.clockStr}</span>
-          <a href="crm_system.html" class="btn btn-sm" style="text-decoration:none;font-size:12px;padding:4px 10px"><i class="ti ti-address-book"></i> CRM</a>
+          ${state.role==='admin'?`<a href="crm_system.html" class="btn btn-sm" style="text-decoration:none;font-size:12px;padding:4px 10px"><i class="ti ti-target"></i> KGI</a>`:''}
           <span class="badge ${state.role==='admin'?'badge-admin':'badge-staff'}">${name}</span>
         </div>
       </div>
@@ -1123,6 +1125,7 @@ function pageContent(){
   if(state.page==='dashboard')return dashboardPage();
   if(state.page==='team')return teamPage();
   if(state.page==='summary')return summaryPage();
+  if(state.page==='timeline')return timelinePage();
   if(state.page==='admin')return adminPage();
   return '';
 }
@@ -2834,8 +2837,122 @@ function bindTeam(){
   const clearAll=document.getElementById('alert-clear-all');
   if(clearAll)clearAll.onclick=()=>{state.alertAck={};saveState();render();};
 }
+function bindTimeline(){
+  document.querySelectorAll('[data-tlkpi]').forEach(el=>{el.onclick=()=>{state.tlKpi=el.dataset.tlkpi;render();};});
+  document.querySelectorAll('[data-tlview]').forEach(el=>{
+    el.onclick=()=>{
+      state.tlView=el.dataset.tlview;
+      if(el.dataset.tlstaff!==undefined)state.tlStaff=parseInt(el.dataset.tlstaff);
+      render();
+    };
+  });
+}
 
 /* ===== SUMMARY（業績サマリー：アウトバウンド＋インバウンド統合） ===== */
+function timelinePage(){
+  const isAdmin=state.role==='admin';
+  const si=isAdmin?(state.user!==null?state.user:0):state.user;
+  const kpi=state.tlKpi||KPI_ACT[0];
+  // tlView: 'staff'=全スタッフ(admin), 'self'=個人全KPI
+  const tlView=isAdmin?(state.tlView||'staff'):'self';
+  const tlStaff=state.tlStaff!==undefined?state.tlStaff:(isAdmin?0:si);
+  const pace=DAYS>0?Math.round(LAST_D/DAYS*100):0;
+
+  function rowD(who,k){
+    let act,goal;
+    if(who==='total'){
+      act=sumKpiAll(k);
+      goal=STAFF_LIST.reduce((_,__,i)=>_+(gData()[i]&&gData()[i][k]||0),0);
+    }else{
+      act=sumKpi(who,k);
+      goal=(gData()[who]&&gData()[who][k])||0;
+    }
+    const proj=goal&&LAST_D>0?Math.round(act/LAST_D*DAYS):null;
+    const projPct=goal&&proj!=null?Math.round(proj/goal*100):null;
+    const fillW=goal?Math.min(100,Math.round(act/goal*100)):0;
+    return{act,goal,proj,projPct,fillW};
+  }
+
+  const colOf=pp=>pp==null?'#b0b8c4':pp>=100?'#1D9E75':pp>=80?'#BA7517':'#D85A30';
+  const badgeOf=pp=>{
+    if(pp==null)return`<span style="font-size:10px;padding:2px 7px;border-radius:4px;background:#f0f4f8;color:#9aa4b2">目標未設定</span>`;
+    if(pp>=100)return`<span style="font-size:10px;padding:2px 7px;border-radius:4px;background:#d1fae5;color:#065f46;font-weight:700">達成見込み</span>`;
+    if(pp>=80)return`<span style="font-size:10px;padding:2px 7px;border-radius:4px;background:#fef3c7;color:#92400e;font-weight:700">要注意</span>`;
+    return`<span style="font-size:10px;padding:2px 7px;border-radius:4px;background:#fee2e2;color:#991b1b;font-weight:700">遅延</span>`;
+  };
+
+  function barRow(label,rd,isBold){
+    const{act,goal,projPct,fillW}=rd;
+    const c=colOf(projPct);
+    const projCapped=projPct!=null?Math.min(projPct,98):null;
+    const projTxt=projPct==null?null:projPct>=100?`↑${projPct}%`:`→${projPct}%`;
+    return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);${isBold?'border-top:2px solid var(--border);margin-top:4px':''}">
+      <div style="width:120px;font-size:12px;flex-shrink:0;font-weight:${isBold?'700':'400'};color:${isBold?'#185FA5':'inherit'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(String(label))}</div>
+      <div style="flex:1;position:relative;height:26px">
+        <div style="position:absolute;inset:4px 0;background:#e8eef5;border-radius:4px;overflow:hidden">
+          <div style="position:absolute;top:0;bottom:0;left:0;width:${fillW}%;background:${c};opacity:.82;border-radius:4px;transition:width .3s"></div>
+        </div>
+        <div style="position:absolute;top:0;bottom:0;left:${pace}%;width:1px;background:#aaa;opacity:.45;z-index:2"></div>
+        <div style="position:absolute;top:-1px;bottom:-1px;left:${Math.min(pace+0.5,99)}%;width:2px;background:#D85A30;z-index:3;border-radius:1px"></div>
+        ${projTxt?`<div style="position:absolute;top:50%;left:${projCapped}%;transform:translate(-50%,-50%);z-index:4;font-size:10px;font-weight:800;color:${c};white-space:nowrap;background:rgba(255,255,255,.93);padding:0 3px;border-radius:3px">${esc(projTxt)}</div>`:''}
+      </div>
+      <div style="width:88px;flex-shrink:0;text-align:right">${badgeOf(projPct)}</div>
+      <div style="width:72px;flex-shrink:0;text-align:right;font-size:11px;color:var(--text-secondary)">${act}${goal?' / '+goal:''}</div>
+    </div>`;
+  }
+
+  const axisRow=`<div style="display:flex;align-items:center;gap:10px;padding:0 0 6px;border-bottom:2px solid var(--border);font-size:10px;color:#9aa4b2">
+    <div style="width:120px;flex-shrink:0"></div>
+    <div style="flex:1;display:flex;justify-content:space-between;padding:0 1px"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
+    <div style="width:88px;flex-shrink:0;text-align:right">月末予測</div>
+    <div style="width:72px;flex-shrink:0;text-align:right">実/目標</div>
+  </div>`;
+
+  const legend=`<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;color:#6b7a8d">
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:14px;height:2px;background:#D85A30;display:inline-block;border-radius:1px"></span>今日（${LAST_D}日目 / ${pace}%経過）</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:14px;height:2px;background:#aaa;opacity:.5;display:inline-block"></span>目標ペース位置</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="font-size:10px;font-weight:800;color:#555">→N%</span>月末着地予測</span>
+  </div>`;
+
+  // ===== スタッフ：自分の全KPI =====
+  if(!isAdmin){
+    const rows=KPI_ACT.map(k=>barRow(k,rowD(si,k),false)).join('');
+    return `<div class="card">
+      <div style="font-size:14px;font-weight:700;margin-bottom:14px"><i class="ti ti-chart-gantt" style="color:#185FA5"></i> 着地タイムライン — ${STAFF_LIST[si]}（${Y}年${M+1}月）</div>
+      ${axisRow}${rows}${legend}
+    </div>`;
+  }
+
+  // ===== 管理者ビュー =====
+  const kpiToggle=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+    <span style="font-size:12px;color:var(--text-secondary)">KPI：</span>
+    ${KPI_ACT.map(k=>`<button class="toggle-btn ${kpi===k?'active':''}" data-tlkpi="${esc(k)}" style="font-size:11px">${esc(k)}</button>`).join('')}
+  </div>`;
+
+  const viewToggle=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+    <span style="font-size:12px;color:var(--text-secondary)">表示：</span>
+    <button class="toggle-btn ${tlView==='staff'?'active':''}" data-tlview="staff">全スタッフ一覧</button>
+    ${STAFF_LIST.map((s,i)=>`<button class="toggle-btn ${tlView==='self'&&tlStaff===i?'active':''}" data-tlview="self" data-tlstaff="${i}" style="font-size:11px">${esc(s)}</button>`).join('')}
+  </div>`;
+
+  let rows;
+  if(tlView==='staff'){
+    // 全スタッフ行 + チーム合計行
+    rows=STAFF_LIST.map((s,i)=>barRow(s,rowD(i,kpi),false)).join('');
+    rows+=barRow('チーム合計',rowD('total',kpi),true);
+  }else{
+    // 特定スタッフの全KPI
+    rows=KPI_ACT.map(k=>barRow(k,rowD(tlStaff,k),false)).join('');
+    rows+=barRow('合計達成率',rowD(tlStaff,kpi),true);
+  }
+
+  return `<div class="card">
+    <div style="font-size:14px;font-weight:700;margin-bottom:14px"><i class="ti ti-chart-gantt" style="color:#185FA5"></i> 着地タイムライン — ${Y}年${M+1}月</div>
+    ${tlView==='staff'?kpiToggle:''}
+    ${viewToggle}
+    ${axisRow}${rows}${legend}
+  </div>`;
+}
 function summaryPage(){
   const isAdmin=state.role==='admin';
   const si=isAdmin?state.summaryStaff:state.user;

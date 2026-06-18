@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CRM — 顧客・案件管理</title>
+<title>KGI管理 — 目標達成管理</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
 <style>
 :root{
@@ -211,7 +211,7 @@ function getAdminPw(){return(kpiState&&kpiState.adminPw)||'admin@1234';}
 function topBar(){
   const name=isAdmin()?'管理者':esc(staffName(state.user));
   return `<div class="topbar">
-    <div class="topbar-title"><i class="ti ti-address-book"></i> CRM</div>
+    <div class="topbar-title"><i class="ti ti-target"></i> KGI管理</div>
     <span class="badge"><i class="ti ti-user"></i> ${name}</span>
     <a href="kpi_system.html" class="btn btn-sm" style="text-decoration:none"><i class="ti ti-chart-bar"></i> KPI管理</a>
     <button class="btn btn-sm" id="logout-btn"><i class="ti ti-logout"></i> ログアウト</button>
@@ -235,8 +235,8 @@ function loginPage(){
   return `<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:16px">
     <div class="card" style="width:100%;max-width:360px;padding:28px">
       <div style="text-align:center;margin-bottom:24px">
-        <div style="font-size:34px;font-weight:800;color:var(--accent)"><i class="ti ti-address-book"></i> CRM</div>
-        <div style="color:var(--text-secondary);font-size:13px;margin-top:4px">顧客・案件管理システム</div>
+        <div style="font-size:34px;font-weight:800;color:var(--accent)"><i class="ti ti-target"></i> KGI管理</div>
+        <div style="color:var(--text-secondary);font-size:13px;margin-top:4px">目標達成管理システム（管理者専用）</div>
       </div>
       ${!hasKpi?`<div style="padding:10px 12px;background:var(--bg-warning);color:var(--text-warning);border-radius:var(--radius);font-size:12px;margin-bottom:14px">
         <i class="ti ti-alert-triangle"></i> KPIシステムのデータが見つかりません。先に <a href="kpi_system.html" style="color:var(--text-warning);font-weight:600">KPI管理システム</a> を開いてログインしてください。
@@ -853,6 +853,17 @@ function render(){
   const app=document.getElementById('app');
   if(!state.role||state.page==='login'){
     state.page='login';app.innerHTML=loginPage();bindLogin();return;
+  }
+  if(state.role==='staff'){
+    app.innerHTML=`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:16px">
+      <div class="card" style="width:100%;max-width:360px;padding:32px;text-align:center">
+        <div style="font-size:48px;margin-bottom:12px"><i class="ti ti-lock" style="color:var(--text-tertiary)"></i></div>
+        <div style="font-size:16px;font-weight:700;margin-bottom:8px">このページは管理者専用です</div>
+        <div style="font-size:13px;color:var(--text-secondary);margin-bottom:20px">KGI管理システムは管理者のみアクセスできます。</div>
+        <a href="kpi_system.html" class="btn btn-primary" style="text-decoration:none"><i class="ti ti-chart-bar"></i> KPI管理に戻る</a>
+      </div>
+    </div>`;
+    return;
   }
   const pages={dashboard:dashboardPage,customers:customersPage,customerDetail:customerDetailPage,deals:dealsPage,activities:activitiesPage,admin:adminPage};
   const content=(pages[state.page]||dashboardPage)();

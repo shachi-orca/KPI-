@@ -419,7 +419,7 @@ function exportLeaveCSV(){
 /* ===== データ永続化（LocalStorage） ===== */
 const PERSIST_KEY='kpiSystemState_v2'; // v2: データを期間（年_月）キーで保持
 // 実行時オブジェクト・一時UI状態は保存対象外（dashChartは循環参照のため必ず除外）
-const NO_PERSIST=['dashChart','clockInterval','_dashDrawChart','greetingMsg','greetingType'];
+const NO_PERSIST=['dashChart','clockInterval','_dashDrawChart','greetingMsg','greetingType','_prefillOtDate','_prefillLvDate'];
 let _saveTimer=null;
 
 // stateをLocalStorageへ保存（render()ごとに呼ぶ）
@@ -1345,6 +1345,8 @@ function shiftPrefCardHTML(si){
 
 function attExtraHTML(si){
   const today=`${REAL_Y}-${pad2(REAL_M+1)}-${pad2(REAL_D)}`;
+  const prefillOtDate=state._prefillOtDate||today; state._prefillOtDate=null;
+  const prefillLvDate=state._prefillLvDate||today; state._prefillLvDate=null;
   const sc=(state.shifts[si]||{})[today];const st=SHIFT_TYPES.find(t=>t.c===sc);
   const myReqs=state.otRequests.filter(r=>r.si===si).slice(-6).reverse();
   const myLeaveReqs=(state.leaveRequests||[]).filter(r=>r.si===si).slice(-6).reverse();
@@ -1358,11 +1360,22 @@ function attExtraHTML(si){
   <div class="card">
     <div class="section-title"><i class="ti ti-clock-plus"></i> 残業申請</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">
-      <div><div class="form-label">対象日</div><input type="date" class="form-control" id="ot-date" value="${today}" style="max-width:160px"></div>
+      <div><div class="form-label">対象日</div><input type="date" class="form-control" id="ot-date" value="${prefillOtDate}" style="max-width:160px"></div>
       <div><div class="form-label">残業開始</div><input type="time" class="form-control" id="ot-start" value="18:00" style="width:110px"></div>
       <div><div class="form-label">残業終了</div><input type="time" class="form-control" id="ot-end" value="19:00" style="width:110px"></div>
       <div><div class="form-label">残業時間(h)</div><input type="number" class="form-control" id="ot-hours" min="0.5" step="0.5" value="1" style="width:90px"></div>
-      <div style="flex:1;min-width:160px"><div class="form-label">理由</div><input type="text" class="form-control" id="ot-reason" placeholder="例：問い合わせ対応の集中"></div>
+      <div style="flex:1;min-width:160px"><div class="form-label">理由</div>
+        <select class="select" id="ot-reason" style="width:100%">
+          <option value="">理由を選択してください</option>
+          <option value="問い合わせ対応の延長">問い合わせ対応の延長</option>
+          <option value="顧客対応・商談の長期化">顧客対応・商談の長期化</option>
+          <option value="締め切り・納期対応">締め切り・納期対応</option>
+          <option value="引き継ぎ・研修対応">引き継ぎ・研修対応</option>
+          <option value="業務処理の遅延回収">業務処理の遅延回収</option>
+          <option value="__other__">その他（直接入力）</option>
+        </select>
+        <input type="text" class="form-control" id="ot-reason-other" placeholder="理由を入力" style="margin-top:4px;display:none">
+      </div>
       <button class="btn btn-primary" id="ot-submit"><i class="ti ti-send"></i> 申請</button>
     </div>
     ${myReqs.length?`<table class="att-list"><thead><tr><th>対象日</th><th>時間帯</th><th>時間</th><th>理由</th><th>状態</th></tr></thead>
@@ -1371,8 +1384,19 @@ function attExtraHTML(si){
   <div class="card">
     <div class="section-title"><i class="ti ti-calendar-heart"></i> 有給申請 <span class="tip" style="margin-left:6px">残日数 ${remaining}日</span></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">
-      <div><div class="form-label">取得希望日</div><input type="date" class="form-control" id="lv-date" value="${today}" style="max-width:160px"></div>
-      <div style="flex:1;min-width:160px"><div class="form-label">理由（任意）</div><input type="text" class="form-control" id="lv-reason" placeholder="例：私用"></div>
+      <div><div class="form-label">取得希望日</div><input type="date" class="form-control" id="lv-date" value="${prefillLvDate}" style="max-width:160px"></div>
+      <div style="flex:1;min-width:160px"><div class="form-label">理由（任意）</div>
+        <select class="select" id="lv-reason" style="width:100%">
+          <option value="">理由を選択（任意）</option>
+          <option value="私用">私用</option>
+          <option value="体調不良・通院">体調不良・通院</option>
+          <option value="家族の用事・看護">家族の用事・看護</option>
+          <option value="冠婚葬祭">冠婚葬祭</option>
+          <option value="リフレッシュ・旅行">リフレッシュ・旅行</option>
+          <option value="__other__">その他（直接入力）</option>
+        </select>
+        <input type="text" class="form-control" id="lv-reason-other" placeholder="理由を入力" style="margin-top:4px;display:none">
+      </div>
       <button class="btn btn-primary" id="lv-submit"><i class="ti ti-send"></i> 申請</button>
     </div>
     ${myLeaveReqs.length?`<table class="att-list"><thead><tr><th>希望日</th><th>理由</th><th>状態</th></tr></thead>
@@ -1452,6 +1476,17 @@ function bindAttendance(){
     const bar=document.getElementById('confirm-out');
     if(bar)bar.classList.remove('show');
   };
+  // 残業申請 理由セレクト
+  const otReasonSel=document.getElementById('ot-reason');
+  if(otReasonSel)otReasonSel.onchange=()=>{
+    const other=document.getElementById('ot-reason-other');
+    if(other)other.style.display=otReasonSel.value==='__other__'?'':'none';
+  };
+  const lvReasonSel=document.getElementById('lv-reason');
+  if(lvReasonSel)lvReasonSel.onchange=()=>{
+    const other=document.getElementById('lv-reason-other');
+    if(other)other.style.display=lvReasonSel.value==='__other__'?'':'none';
+  };
   // 残業申請
   const otBtn=document.getElementById('ot-submit');
   if(otBtn)otBtn.onclick=()=>{
@@ -1459,9 +1494,10 @@ function bindAttendance(){
     const hours=parseFloat(document.getElementById('ot-hours').value);
     const startTime=document.getElementById('ot-start').value;
     const endTime=document.getElementById('ot-end').value;
-    const reason=(document.getElementById('ot-reason').value||'').trim();
+    const sel=document.getElementById('ot-reason');
+    const reason=sel&&sel.value==='__other__'?(document.getElementById('ot-reason-other').value||'').trim():(sel&&sel.value||'');
     if(!date||!hours||hours<=0){toast('対象日と残業時間を入力してください','error');return;}
-    if(!reason){toast('理由を入力してください','error');return;}
+    if(!reason){toast('理由を選択してください','error');return;}
     state.otRequests.push({id:Date.now()+'_'+si,si,date,hours,startTime,endTime,reason,status:'pending',by:null});
     toast('残業申請を送信しました（承認待ち）','success');render();
   };
@@ -1469,7 +1505,8 @@ function bindAttendance(){
   const lvBtn=document.getElementById('lv-submit');
   if(lvBtn)lvBtn.onclick=()=>{
     const date=document.getElementById('lv-date').value;
-    const reason=(document.getElementById('lv-reason').value||'').trim();
+    const lvSel=document.getElementById('lv-reason');
+    const reason=lvSel&&lvSel.value==='__other__'?(document.getElementById('lv-reason-other').value||'').trim():(lvSel&&lvSel.value||'');
     if(!date){toast('取得希望日を入力してください','error');return;}
     const lv=leaveOf(si);const remaining=Math.max(0,(lv.granted||0)-(lv.taken||[]).length);
     if(remaining<=0){toast('有給残日数が不足しています','error');return;}
@@ -1630,12 +1667,12 @@ function histDailyContent(si){
             ${day.brkS?`<span><i class="ti ti-coffee" style="color:#BA7517;font-size:13px"></i> ${day.brkS}〜${day.brkE||'?'}</span>`:''}
             ${day.outT?`<span><i class="ti ti-logout" style="color:#D85A30;font-size:13px"></i> ${day.outT}</span>`:'<span style="color:#BA7517"><i class="ti ti-clock" style="font-size:13px"></i> 退勤未打刻</span>'}
             ${(()=>{const b=[];const f=lab.perDay[day.d];if(f){const appr=approvedOTH(si,ds)>0;
-              if(f.ot){const lbl=(f.lng?'長時間':'残業')+(appr?'(承認)':'(未承認)');b.push(`<span class="chip" style="background:${appr?'var(--bg-success)':'var(--bg-warning)'};color:${appr?'var(--text-success)':'var(--text-warning)'}">${lbl}</span>`);}
+              if(f.ot){const lbl=(f.lng?'長時間':'残業')+(appr?'(承認)':'(未承認)');b.push(appr?`<span class="chip" style="background:var(--bg-success);color:var(--text-success)">${lbl}</span>`:`<span class="chip" style="background:var(--bg-warning);color:var(--text-warning);cursor:pointer" data-ot-apply="${ds}" title="クリックして申請"><i class="ti ti-send" style="font-size:10px"></i> ${lbl}</span>`);}
               if(f.shortBreak)b.push('<span class="chip" style="background:var(--bg-danger);color:var(--text-danger)">休憩不足</span>');
               if(f.lateNight)b.push('<span class="chip" style="background:var(--bg-warning);color:var(--text-warning)">深夜</span>');}
               const dev=shiftDeviation(si,ds);if(dev){const c=dev.level==='danger'?'var(--bg-danger)':'var(--bg-warning)';const tc=dev.level==='danger'?'var(--text-danger)':'var(--text-warning)';b.push(`<span class="chip" style="background:${c};color:${tc}">${dev.label}</span>`);}
               return b.join(' ');})()}`
-            :`${isLeave?'<span class="chip" style="background:#E8F5E9;color:#2E7D32;font-size:11px"><i class="ti ti-calendar-heart" style="font-size:11px"></i> 休暇 / 有給</span>':''}<span style="color:var(--text-tertiary)">${isToday?'（本日稼働中）':isSun||isSat?'休日':isLeave?'':'欠勤 / 休暇'}</span>`}
+            :`${isLeave?'<span class="chip" style="background:#E8F5E9;color:#2E7D32;font-size:11px"><i class="ti ti-calendar-heart" style="font-size:11px"></i> 休暇 / 有給</span>':''}${isToday?'<span style="color:var(--text-tertiary)">（本日稼働中）</span>':isSun||isSat?'<span style="color:var(--text-tertiary)">休日</span>':isLeave?'':(state.role!=='admin'?`<span class="chip" style="background:var(--bg-danger);color:var(--text-danger);cursor:pointer;font-size:11px" data-lv-apply="${ds}" title="クリックして有給申請"><i class="ti ti-calendar-plus" style="font-size:11px"></i> 欠勤 / 有給申請</span>`:'<span style="color:var(--text-tertiary)">欠勤 / 休暇</span>')}`}
         </div>
         <div class="hist-work" style="color:${hasLog&&workMin>0?'var(--text-primary)':'var(--text-tertiary)'}">${fmtWorkMin(workMin)}</div>
         ${isToday?'<span style="font-size:10px;padding:2px 7px;background:#E6F1FB;color:#185FA5;border-radius:10px;font-weight:600">本日</span>':''}
@@ -1714,6 +1751,30 @@ function histTotalContent(si){
   </div>`;
 }
 
+function showOtApplyModal(ds){
+  const existing=document.getElementById('ot-apply-modal');if(existing)existing.remove();
+  document.body.insertAdjacentHTML('beforeend',`<div class="modal-overlay" id="ot-apply-modal" style="z-index:300">
+    <div class="modal" style="max-width:400px">
+      <div class="modal-title"><i class="ti ti-clock-plus"></i> 残業申請</div>
+      <p style="margin-bottom:16px;font-size:13px"><b>${ds}</b> の残業はまだ申請されていません。<br>申請ページへ移動して申請しますか？</p>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn" id="ot-modal-cancel">閉じる</button>
+        <button class="btn btn-primary" id="ot-modal-go"><i class="ti ti-send"></i> 申請する</button>
+      </div>
+    </div>
+  </div>`);
+  const ov=document.getElementById('ot-apply-modal');
+  ov.onclick=e=>{if(e.target===ov)ov.remove();};
+  document.getElementById('ot-modal-cancel').onclick=()=>ov.remove();
+  document.getElementById('ot-modal-go').onclick=()=>{
+    ov.remove();
+    state._prefillOtDate=ds;
+    state.page='attendance';
+    render();
+    setTimeout(()=>{const el=document.getElementById('ot-date');if(el)el.closest('.card').scrollIntoView({behavior:'smooth',block:'start'});},150);
+  };
+}
+
 function bindHistory(){
   document.querySelectorAll('[data-htab]').forEach(el=>{el.onclick=()=>{state.histTab=el.dataset.htab;render();};});
   const el=document.getElementById('hist-staff');
@@ -1723,6 +1784,15 @@ function bindHistory(){
     render();
   };
   const hc=document.getElementById('hist-csv');if(hc)hc.onclick=exportAttCSV;
+  // 残業未申請チップ → ポップアップ
+  document.querySelectorAll('[data-ot-apply]').forEach(el=>{el.onclick=()=>showOtApplyModal(el.dataset.otApply);});
+  // 欠勤 → 有給申請ページへ
+  document.querySelectorAll('[data-lv-apply]').forEach(el=>{el.onclick=()=>{
+    state._prefillLvDate=el.dataset.lvApply;
+    state.page='attendance';
+    render();
+    setTimeout(()=>{const lel=document.getElementById('lv-date');if(lel)lel.closest('.card').scrollIntoView({behavior:'smooth',block:'start'});},150);
+  };});
 }
 
 /* ===== KPI ===== */

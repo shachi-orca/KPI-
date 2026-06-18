@@ -439,6 +439,15 @@ function detailHTML(){
             <div class="cust-name">${esc(c.name)}</div>
           </div>
         </div>
+        <div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;color:var(--text-3);letter-spacing:.5px;margin-bottom:8px"><i class="ti ti-calendar-event" style="font-size:13px"></i> 次回アポイント</div>
+          ${apoActive?`<div style="background:${apoBg};border:${apoBorderStyle};border-radius:10px;padding:12px 14px">
+            ${apoIn20?`<div style="font-size:12px;font-weight:800;color:#DC2626;margin-bottom:5px">⚡ まもなくアポイント（あと${apoMin}分）</div>`:''}
+            <div style="font-size:18px;font-weight:800;color:${apoColor};letter-spacing:-.3px">${fmtDT(apo.at)}</div>
+            ${apo.note?`<div style="font-size:13px;color:var(--text-2);margin-top:4px">${esc(apo.note)}</div>`:''}
+            <div style="font-size:12px;color:var(--text-3);margin-top:5px">担当: ${esc(staffName(apo.si)||'')}</div>
+          </div>`:'<div style="font-size:13px;color:var(--text-3)">設定なし</div>'}
+        </div>
         <div>
           <div class="irow"><span class="ikey">ID</span><span class="ival" style="color:var(--text-3)">${c.id}</span></div>
           <div class="irow"><span class="ikey">会社名/所属</span><span class="ival">${esc(c.company||'—')}</span></div>
@@ -450,15 +459,6 @@ function detailHTML(){
           <div class="irow"><span class="ikey">メール</span><span class="ival">${c.email?`${esc(c.email)}<button class="cpbtn" data-cp="${esc(c.email)}"><i class="ti ti-copy"></i></button>`:'—'}</span></div>
           ${tags?`<div class="irow"><span class="ikey">タグ</span><span class="ival">${tags}</span></div>`:''}
           <div class="irow"><span class="ikey">最新対応日</span><span class="ival" style="font-weight:600">${lastContact(c.id)||'—'}</span></div>
-        </div>
-        <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:14px">
-          <div style="font-size:11px;font-weight:700;color:var(--text-3);letter-spacing:.5px;margin-bottom:8px"><i class="ti ti-calendar-event" style="font-size:13px"></i> 次回アポイント</div>
-          ${apoActive?`<div style="background:${apoBg};border:${apoBorderStyle};border-radius:10px;padding:12px 14px">
-            ${apoIn20?`<div style="font-size:12px;font-weight:800;color:#DC2626;margin-bottom:5px">⚡ まもなくアポイント（あと${apoMin}分）</div>`:''}
-            <div style="font-size:18px;font-weight:800;color:${apoColor};letter-spacing:-.3px">${fmtDT(apo.at)}</div>
-            ${apo.note?`<div style="font-size:13px;color:var(--text-2);margin-top:4px">${esc(apo.note)}</div>`:''}
-            <div style="font-size:12px;color:var(--text-3);margin-top:5px">担当: ${esc(staffName(apo.si)||'')}</div>
-          </div>`:'<div style="font-size:13px;color:var(--text-3)">設定なし</div>'}
         </div>
       </div>
       <div class="panel" style="margin-top:0">

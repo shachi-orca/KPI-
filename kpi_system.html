@@ -2889,6 +2889,11 @@ function memoPage(){
     <div style="display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap">
       <button id="memo-save" class="btn btn-primary" ${hits.length?'disabled':''} style="${hits.length?'opacity:.45;cursor:not-allowed':''}"><i class="ti ti-device-floppy"></i> 保存する</button>
       <button id="memo-clear" class="btn" style="color:var(--text-danger)"><i class="ti ti-trash"></i> クリア</button>
+      <div id="memo-clear-confirm" style="display:none;align-items:center;gap:8px;padding:6px 12px;background:var(--bg-danger);border-radius:var(--radius);font-size:12px;color:var(--text-danger)">
+        <i class="ti ti-alert-triangle"></i> メモ内容をすべて消去しますか？
+        <button id="memo-clear-ok" class="btn btn-sm" style="background:#D85A30;color:#fff;font-size:11px">消去する</button>
+        <button id="memo-clear-cancel" class="btn btn-sm" style="font-size:11px">キャンセル</button>
+      </div>
       <span class="tip" style="margin-left:auto;font-size:11px">文字数：<span id="memo-count">${(m.text||'').length}</span>字</span>
     </div>
 
@@ -2929,11 +2934,27 @@ function bindMemo(){
   };
 
   const clearBtn=document.getElementById('memo-clear');
+  const confirmBar=document.getElementById('memo-clear-confirm');
+  const confirmOk=document.getElementById('memo-clear-ok');
+  const confirmCancel=document.getElementById('memo-clear-cancel');
   if(clearBtn){
     clearBtn.onclick=()=>{
       if(ta.value.trim()===''&&(!state.sharedMemo||!state.sharedMemo.text))return;
-      ta.value='';
-      ta.oninput();
+      confirmBar.style.display='flex';
+      clearBtn.style.display='none';
+    };
+  }
+  if(confirmOk){
+    confirmOk.onclick=()=>{
+      ta.value='';ta.oninput();
+      confirmBar.style.display='none';
+      clearBtn.style.display='';
+    };
+  }
+  if(confirmCancel){
+    confirmCancel.onclick=()=>{
+      confirmBar.style.display='none';
+      clearBtn.style.display='';
     };
   }
 }

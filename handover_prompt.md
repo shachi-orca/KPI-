@@ -8,7 +8,7 @@
 
 ### 【次優先】未対応事項（2026-06-18時点）
 
-対象ファイル：`kpi_system.html`（現在 約3737行）
+対象ファイル：`kpi_system.html`（現在 約3825行）／`crm_system.html`
 
 - 目標の複数月トレンドグラフ（未着手）
 - ファネル下流の0偏り / 期間ナビの年範囲ハードコード（見送り中）
@@ -18,37 +18,38 @@
 
 ## 今セッション（2026-06-18）で完了した実装
 
-### KGIリネーム＋着地タイムライン（2026-06-18）✅
+### チームメモ帳（`kpi_system.html`）✅
+- サイドバーに「メモ帳」(id=`memo`) ページを追加（全スタッフ共有・1つのメモ帳）
+- `state.sharedMemo = {text, by, byName, at}` で保存。最終更新者・日時を表示
+- `SENSITIVE_RULES` / `detectSensitive(text)` で8パターンをリアルタイム検出しブロック
+  - 電話番号・メールアドレス・郵便番号（〒）・クレジットカード番号
+  - マイナンバー・個人番号 / 口座番号情報 / パスワード記述（「パスワード：○○」形式）/ 社会保険番号
+- クリアボタン → インライン確認バー（「消去する」「キャンセル」）で即時消去を防止
+- `memoPage()` / `bindMemo()` を `timelinePage()` の直前に実装
+
+### KGI管理者セッション自動同期（`crm_system.html`）✅
+- KPIシステムで管理者ログイン中にKGIボタンを開くと、CRM側の古いセッションを上書きして自動的に管理者としてログイン
+- `render()` 冒頭で `kpiState.role==='admin'` を検出して `state.role='admin'` に同期
+
+### KGIリネーム＋着地タイムライン（`kpi_system.html` / `crm_system.html`）✅
 - `kpi_system.html`: topbarのCRMリンクを管理者専用・アイコン`ti-target`・ラベル「KGI」に変更（スタッフには完全非表示）
 - `crm_system.html`: タイトル・topbar・ログイン画面を「KGI管理」に変更。スタッフがログインするとアクセス拒否画面を表示
 - `kpi_system.html`: サイドバーに「着地確認」(id=`timeline`)ページを追加
-  - `timelinePage()` / `bindTimeline()` を追加（`summaryPage()`の直前）
-  - スタッフ：自分の全KPI_ACTをタイムラインバーで表示（実績・目標ペース・今日線・→月末予測%・バッジ）
+  - `timelinePage()` / `bindTimeline()` を実装
+  - スタッフ：自分の全KPI_ACTをタイムラインバーで表示（実績バー・目標ペース線・今日の縦線・→月末予測%・バッジ）
   - 管理者：KPI切替 ＋ 全スタッフ一覧ビュー（チーム合計行付き）／特定スタッフ全KPIビューを切替
-  - state: `tlKpi`（選択KPI）/ `tlView`（'staff'|'self'）/ `tlStaff`（スタッフindex）
+  - state追加: `tlKpi`（選択KPI文字列）/ `tlView`（`'staff'`|`'self'`）/ `tlStaff`（スタッフindex）
+
+### KPI実績参照カード（`crm_system.html`）✅
+- `sumKpiCRM(si, k)` を追加（`kpiSystemState_v2` の `kpiData` から月次合計を算出）
+- ダッシュボードの月末着地予測カード上部に「KPI実績参照」カードを表示
+  （契約数・コール数・アプローチ数・クロージング数。KPIデータ未設定時は非表示）
 
 ### アラートボタン＋目標・着地予測（`kpi_system.html`）✅
-- `alertsPanelHTML()` の `active.map` 内：`a.msg.includes('残業')` → 「申請」ボタン（`state.page='attendance'`へ遷移）
-- `alertsPanelHTML()` の `active.map` 内：`a.msg.includes('KPI達成率')` → 「KPI確認」ボタン（`state.page='kpi'; state.kpiTab='rate'`へ遷移）
-- `dashboardPage()` 個人ビューの「全KPI達成状況」カード：各行に「月末予測」列を追加（`Math.round(t/LAST_D*DAYS)`、LAST_D=0時は「-」。100%以上=緑、80%以上=黄、未満=赤）
-- `teamPage()` のアラートパネル直下：「目標 vs 着地予測」カード追加（コール数・アプローチ数・契約数・クロージング数の4KPIで全スタッフ分を表形式表示）
-
-### CRM拡張（`crm_system.html`）✅
-- `deal.memo`（商談メモ）：dealModal に追加、案件一覧に1行プレビュー表示
-- `deal.link`（関連リンク URL）：dealModal に追加、一覧にリンクアイコン（https?://のみリンク化）
-- `exportActivityCSV()`：活動記録ページに「CSV出力」ボタン（担当者・日付・種別・顧客名・メモ、Excel互換UTF-8 BOM）
-
-### 残業・有給申請の改善（`kpi_system.html`）✅
-- 残業申請の理由を5択プルダウン＋「その他（直接入力）」に変更
-- 有給申請の理由を5択プルダウン＋「その他（直接入力）」に変更（任意）
-- 出勤履歴の「残業(未承認)」チップをクリッカブルに：`showOtApplyModal(ds)` でポップアップ → 打刻ページへ遷移・日付自動セット（`state._prefillOtDate`）
-- 出勤履歴の欠勤日（スタッフのみ）を「欠勤/有給申請」チップに：クリックで打刻ページへ遷移・日付自動セット（`state._prefillLvDate`）
-- `NO_PERSIST` に `_prefillOtDate`・`_prefillLvDate` を追加
-
-### アラート・時間帯集計の修正（`kpi_system.html`）✅
-- 時間帯集計：個人の「日別履歴」タブを実装（`if(!isTotal && tsView==='daily')` ブランチを `timeslotPage()` に追加）
-- アラート：スタッフは自分のアラートのみ表示（`alertsPanelHTML()` でロール分岐）
-- KPI達成率80%未満アラートを `computeAlerts()` に追加（月経過30%以上・目標設定済みKPIのみ・1行にまとめて表示）
+- `alertsPanelHTML()` の `active.map` 内：残業アラート → 「申請」ボタン（`state.page='attendance'`へ遷移）
+- `alertsPanelHTML()` の `active.map` 内：KPI達成率アラート → 「KPI確認」ボタン（`state.page='kpi'; state.kpiTab='rate'`へ遷移）
+- `dashboardPage()` 個人ビューの「全KPI達成状況」カード：各行に「月末予測」列を追加
+- `teamPage()` のアラートパネル直下：「目標 vs 着地予測」カード追加（4KPI×全スタッフ表形式）
 
 ---
 
@@ -64,8 +65,8 @@
 ### 構成
 - **単一HTMLファイル** (`kpi_system.html`)
 - フレームワーク不使用・バニラJS + Chart.js + Tabler Icons
-- 全データはメモリ上の `state` オブジェクトで管理（永続化未実装）
-- 個別認証（2026-06〜）：スタッフ別パスワード。初期 `kpi@1234`（初回・月初ログイン時に変更必須）／管理者 `admin@1234`。旧共通PW`1234`は廃止
+- 全データはメモリ上の `state` オブジェクトで管理（LocalStorageに永続化）
+- 個別認証（2026-06〜）：スタッフ別パスワード。初期 `kpi@1234`（初回・月初ログイン時に変更必須）／管理者 `admin@1234`
 
 ### 対象ユーザー
 - スタッフ10名のコールセンター・営業チーム
@@ -77,17 +78,20 @@
 
 ### ページ構成（サイドバーナビ）
 
-| ページ | 概要 |
-|--------|------|
-| 打刻 | 出勤・休憩開始・休憩終了・退勤の4ボタン。退勤はインライン確認バーで実行。グリーティング表示。下部に**本日のシフト**＋**残業申請**（理由5択プルダウン）＋**有給申請**（理由5択プルダウン）フォーム（申請履歴/状態付き） |
-| 出勤履歴 | 日別打刻一覧 / 総合時間集計の2タブ。管理者はスタッフ切替＋Total（全員）表示可。日別に**労務バッジ**（残業/長時間/休憩不足/深夜）。**残業(未承認)バッジはクリックでポップアップ→打刻ページへ遷移**。**欠勤日はクリックで有給申請ページへ遷移**（スタッフのみ）。CSV出力可 |
-| KPI入力 | 活動指標10項目・率指標8項目をカレンダー軸で入力。Total選択時は「担当者別」「日別合計」2タブ。値変更で即時保存 |
-| 時間帯集計 | 区切り時刻を自由追加・削除。**個人の「日別履歴」タブを実装**（日×KPIテーブル）。Total選択時は「時間帯別」「日別履歴」2タブ。各行右端にTotal列 |
-| コールセンター | 着信数/応答数/通話時間(分)を日次入力 → 応答率/放棄率/AHTを自動計算。月次カード＋日次表。Total=担当者別 |
-| チャット報告 | 個人 / チーム全体の切替。プレーン（LINE/Chatwork）/ Slackフォーマット切替。1クリックコピー |
-| 個人ダッシュボード | Total選択時はチーム合算グラフ＋スタッフ別達成状況。個人選択時は本日入力テーブル＋**前月比**カード。下部に**フィードバックコメント**（双方向）＋**1on1記録**（管理者が記録） |
-| チームダッシュボード | 上部に**アラートパネル**（未達/欠勤/放棄率/PW未変更/残業/休憩不足/深夜/**KPI達成率80%未満**）。**スタッフは自分のアラートのみ表示**。KPI別**前月比**。ランキング / 全員比較表の2タブ |
-| 管理者画面（管理者のみ） | 代理打刻 / 打刻修正(attLog反映) / 有給欠勤(実データ・CSV) / 目標設定 / **残業承認** / **シフト** / **給与(月給/時給・出勤実績連動)** / スタッフ管理(PW含む) の8タブ |
+| ページ | id | 概要 |
+|--------|-----|------|
+| 打刻 | attendance | 出勤・休憩・退勤の4ボタン。残業申請（理由5択）・有給申請（理由5択）フォーム付き |
+| 出勤履歴 | history | 日別打刻一覧 / 総合時間集計の2タブ。残業(未承認)バッジ・欠勤チップをクリックで申請ページへ遷移。CSV出力可 |
+| KPI入力 | kpi | 活動指標10項目・率指標8項目をカレンダー軸で入力。Total選択時は「担当者別」「日別合計」2タブ |
+| 時間帯集計 | timeslot | 区切り時刻を自由追加・削除。個人の「日別履歴」タブあり |
+| コールセンター | cc | 着信数/応答数/通話時間を日次入力 → 応答率/放棄率/AHTを自動計算 |
+| チャット報告 | report | LINE/Chatwork/Slackフォーマット切替。1クリックコピー |
+| 個人ダッシュボード | dashboard | 前月比カード。全KPI達成状況（月末予測列付き）。フィードバック・1on1記録 |
+| チームダッシュボード | team | アラートパネル（残業→申請ボタン・KPI未達→KPI確認ボタン）。目標vs着地予測カード |
+| 業績サマリー | summary | アウトバウンド・インバウンド統合サマリー |
+| **着地タイムライン** | **timeline** | **スタッフ：自分の全KPIをタイムラインバーで表示。管理者：全スタッフ一覧＋チーム合計** |
+| **チームメモ帳** | **memo** | **全スタッフ共有メモ。センシティブ情報（電話/メール/マイナンバー等）は保存ブロック** |
+| 管理者画面（管理者のみ） | admin | 代理打刻 / 打刻修正 / 有給欠勤 / 目標設定 / 残業承認 / シフト / 給与 / スタッフ管理 の8タブ |
 
 ### KPI項目定義
 
@@ -114,93 +118,58 @@
 
 ```js
 state = {
-  page,           // 現在表示ページID（'login'|'pwchange'|各ページ）
+  page,           // 現在表示ページID
   user,           // ログイン中スタッフのindex (null=管理者)
   role,           // 'staff' | 'admin'
 
-  // 個別認証（2026-06追加）
-  staffPw,        // {si: {pw:文字列, changedYM:'年_月'|null}} スタッフ別パスワード
+  // 個別認証
+  staffPw,        // {si: {pw, changedYM}}
   adminPw,        // 管理者パスワード（既定 'admin@1234'）
-  pendingUser,    // パスワード変更画面で変更待ちのスタッフindex
+  pendingUser,    // PW変更待ちスタッフindex
 
-  // 期間（年月切替）★v2で追加
-  viewYear,       // 閲覧中の年（既定=実際の今年。リロード時は当月へリセット）
-  viewMonth,      // 閲覧中の月 0-11（既定=実際の今月）
-  _gen,           // {periodKey: true} 期間ごとのサンプル生成済みフラグ
+  // 期間
+  viewYear, viewMonth, _gen,
 
   // 打刻
-  attStatus,      // {si: 'off'|'working'|'break'}
-  attLog,         // [{si, type:'in'|'out'|'brk'|'ret2', time, dateKey, dateD}]
-  workStart,      // {si: Date.now()} 出勤時刻ms（個人別）
-  breakStart,     // {si: Date.now()} 休憩開始ms
-  totalBreak,     // {si: 累計休憩ms}
-  workEndTime,    // {si: 退勤確定時の実働ms}
+  attStatus, attLog, workStart, breakStart, totalBreak, workEndTime,
 
-  // KPI ★v2: 最上位が期間キー「年_月」（例 '2026_5'）
+  // KPI（periodKey='年_月'で管理）
   kpiData,        // {periodKey: {staffIndex: {day: {kpiName: value}}}} — kData()
   goals,          // {periodKey: {staffIndex: {kpiName: targetValue}}}   — gData()
-  activeStaff,    // KPI入力・時間帯で選択中のスタッフ index | 'total'
+  activeStaff,    // index | 'total'
   kpiTab,         // 'act' | 'rate'
   kpiTotalView,   // 'staff' | 'daily'
 
   // 時間帯集計
-  timeSlots,      // ['09:00','12:00',...] 区切り時刻配列
-  timeData,       // {periodKey: {'si_kpi_slotIndex': value}} — tData()
-  tsStaff,        // 時間帯選択スタッフ index | 'total'
-  tsView,         // 'slot' | 'daily'
-  tsTab,          // 'act' | 'rate'
+  timeSlots, timeData, tsStaff, tsView, tsTab,
 
   // チャット報告
-  reportTab,      // 'plain' | 'slack'
-  reportScope,    // 'individual' | 'team'
-  reportKpis,     // 表示するKPI名の配列
-  reportStaff,    // 報告対象スタッフ index
-  reportPeriod,   // 'day' | 'month'
-  reportDay,      // 日次レポートの対象日（1-31）
+  reportTab, reportScope, reportKpis, reportStaff, reportPeriod, reportDay,
 
   // 管理者・目標設定
-  goalStaff,      // 目標設定タブ専用のスタッフindex（-1=全体）
+  goalStaff, adminTab, proxyStaff, correctionLog,
 
-  // コールセンター・勤怠
-  ccStaff,        // index | 'total'
-  ccView,         // 'today'|'monthly'|'total'
-  leaveData,      // {si:{granted:付与日数, taken:['YYYY-MM-DD',...]}}
-  leaveRequests,  // [{id,si,date,reason,status,by}]
-  alertAck,       // {key:true} アラート確認済みフラグ
-  shiftNotify,    // {si:[{ds,code}]} シフト変更通知キュー
-  _noSample,      // true = 稼働開始後（clearOperationData()実行済み）
-  payroll,        // {si:{type:'monthly'|'hourly', base}}
-  comments,       // {si:[{by,role,t,text}]}
-  oneOnOne,       // {si:[{date,note,action}]}
-  otRequests,     // [{id,si,date,hours,startTime,endTime,reason,status,by}]
-  shifts,         // {si:{'YYYY-MM-DD':code}}
-  otNotify,       // {si:[{date,hours,status}]}
-  leaveNotify,    // {si:[{date,status}]}
-  shiftPrefs,     // {periodKey:{si:{submitted,submittedAt,days:{ds:{start,end}|null}}}}
-  shiftChangeReqs,// [{id,si,date,start,end,reason,status,by,createdAt}]
-  shiftRemind,    // {si:true}
-  shiftDeadline,  // 提出期限日（既定20）
+  // 勤怠・シフト
+  ccStaff, ccView, leaveData, leaveRequests, alertAck,
+  otRequests, shifts, payroll, shiftPrefs, shiftChangeReqs,
+  shiftRemind, shiftDeadline, shiftNotify, otNotify, leaveNotify,
 
   // ダッシュボード
-  dashStaff,      // index | 'total'
-  dashKpi,        // 選択中KPI名
-  dashChart,      // Chart.jsインスタンス（render前にdestroy必要）
-
-  // チーム
+  dashStaff, dashKpi, dashChart,
   teamKpi, teamTab,
+  histStaff, histTab,
+  summaryStaff,
 
-  // 管理者
-  adminTab,
-  proxyStaff,
-  correctionLog,
+  // 着地タイムライン（2026-06追加）
+  tlKpi,          // 選択中KPI名（文字列）
+  tlView,         // 'staff'（全スタッフ一覧）| 'self'（個人全KPI）
+  tlStaff,        // 表示スタッフindex（管理者の個人ビュー時）
 
-  // 出勤履歴
-  histStaff,      // index | 'total'
-  histTab,        // 'daily' | 'total'
+  // メモ帳（2026-06追加）
+  sharedMemo,     // {text, by(si|null), byName, at(timestamp)}
 
   // 一時UI状態（NO_PERSIST）
-  _prefillOtDate, // 残業申請フォームの日付プリセット（履歴チップクリック時）
-  _prefillLvDate, // 有給申請フォームの日付プリセット（履歴チップクリック時）
+  _prefillOtDate, _prefillLvDate,
 }
 ```
 
@@ -212,19 +181,18 @@ sumKpi(si, kpi)       // スタッフsiのkpi「閲覧中月」合計
 sumKpiAll(kpi)        // 全スタッフのkpi「閲覧中月」合計
 calcRate(si, d)       // スタッフsiの日dの率指標オブジェクト
 getDayLogs(si)        // スタッフsiの打刻集約
-computeAlerts()       // 全スタッフ走査でアラート配列（KPI未達/欠勤/放棄率/PW/残業/休憩不足/深夜/KPI達成率80%未満）
-alertsPanelHTML()     // アラートパネルHTML（スタッフは自分のみ・管理者は全員）
-showOtApplyModal(ds)  // 残業未申請ポップアップ（出勤履歴チップクリック時）
-attExtraHTML(si)      // 打刻ページ下部：シフト＋残業/有給申請フォーム（_prefillOtDate/_prefillLvDate 参照）
-timeslotPage()        // 時間帯集計（個人の日別履歴ビューを含む）
+computeAlerts()       // アラート配列生成（KPI未達/欠勤/放棄率/PW/残業/休憩不足/深夜/KPI達成率80%未満）
+alertsPanelHTML()     // アラートパネルHTML（スタッフは自分のみ・管理者は全員。遷移ボタン付き）
+timelinePage()        // 着地タイムラインページ（スタッフ：自分全KPI / 管理者：全スタッフ一覧）
+memoPage()            // チームメモ帳ページ（センシティブ検出付き）
+detectSensitive(text) // センシティブ情報を検出して検出種別の配列を返す
 saveState()           // LocalStorageへ保存（NO_PERSIST除外）
 loadState()           // 保存stateを復元
-exportKpiCSV()        // KPI入力ページのCSV出力
-exportAttCSV()        // 出勤履歴のCSV出力
 ```
 
-> **永続化キー**: `kpiSystemState_v2` / **NO_PERSIST**: `dashChart`, `clockInterval`, `_dashDrawChart`, `greetingMsg`, `greetingType`, `_prefillOtDate`, `_prefillLvDate`
-> **日付定数**: `REAL_Y/REAL_M/REAL_D`＝実際の今日（打刻系）。`Y/M/DAYS/TODAY_D/LAST_D`＝閲覧中の月（recalcPeriodで更新）
+> **永続化キー**: `kpiSystemState_v2`
+> **NO_PERSIST**: `dashChart`, `clockInterval`, `_dashDrawChart`, `greetingMsg`, `greetingType`, `_prefillOtDate`, `_prefillLvDate`
+> **日付定数**: `REAL_Y/REAL_M/REAL_D`＝実際の今日。`Y/M/DAYS/TODAY_D/LAST_D`＝閲覧中の月（recalcPeriodで更新）
 
 ---
 
@@ -255,10 +223,12 @@ exportAttCSV()        // 出勤履歴のCSV出力
 
 ```
 kpi_system.html    （KPI・シフト・勤怠管理。LocalStorageキー: kpiSystemState_v2）
-crm_system.html    （顧客・案件・活動管理 CRM。LocalStorageキー: crmSystemState_v1）
+crm_system.html    （KGI管理システム。LocalStorageキー: crmSystemState_v1）
 ```
 
-### KPI ↔ CRM の共有設計
-- `crm_system.html` は起動時に `kpiSystemState_v2` を読み込み、`_staffList`・`staffPw`・`adminPw`・`goals` を参照（書き込みなし）
-- ログイン認証は KPI システムと同一
-- KPI 側 topbar 右に「CRM」リンク、CRM 側 topbar 右に「KPI管理」リンク
+### KPI ↔ KGI(CRM) の共有設計
+- `crm_system.html` は起動時に `kpiSystemState_v2` を読み込み、`_staffList`・`staffPw`・`adminPw`・`goals`・`role` を参照（書き込みなし）
+- **KPIシステムで管理者ログイン中にKGIを開くと自動的に管理者セッションを同期**（別ログイン不要）
+- スタッフがKGIにアクセスするとアクセス拒否画面を表示（`kpi_system.html` に戻るボタン）
+- KPI側 topbar右に「KGI」ボタン（**管理者のみ表示**。スタッフには非表示）
+- CRM topbar右に「KPI管理」リンク

@@ -459,6 +459,25 @@ function checkAutoBackup(){
   const t=parseInt(localStorage.getItem(BACKUP_KEY)||'0');
   if(Date.now()-t>BACKUP_INTERVAL_MS)exportFullBackup(true);
 }
+let _restorePending=null; // {text, name}
+function onRestoreFileSelected(file){
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    let parsed;
+    try{parsed=JSON.parse(reader.result);}catch{toast('JSONファイルを読み込めませんでした','error');return;}
+    if(!parsed||typeof parsed!=='object'||!('kpiData' in parsed)||!('staffPw' in parsed)){toast('KPIシステムのバックアップファイルではないようです','error');return;}
+    _restorePending={text:reader.result,name:file.name};
+    render();
+  };
+  reader.readAsText(file);
+}
+function confirmRestore(){
+  if(!_restorePending)return;
+  localStorage.setItem(PERSIST_KEY,_restorePending.text);
+  location.reload();
+}
+function cancelRestore(){_restorePending=null;render();}
 // 連続入力（oninput）用：負荷軽減のため遅延保存
 function saveStateDebounced(){
   clearTimeout(_saveTimer);
@@ -3499,6 +3518,18 @@ function adminStaff(){
       <button class="btn" id="manual-backup-btn"><i class="ti ti-download"></i> 今すぐ全データバックアップ</button>
       <span class="tip" style="margin-left:8px">${lastBackupLabel()}</span>
     </div>
+    <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:16px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px"><i class="ti ti-upload" style="color:#185FA5"></i> バックアップから復元</div>
+      <p class="tip" style="margin-bottom:10px">バックアップJSONファイルを選択すると、現在のデータが上書きされます（外部送信なし・この端末内のみで処理）。</p>
+      <input type="file" id="restore-file-input" accept="application/json" style="display:none">
+      <button class="btn" id="restore-pick-btn"><i class="ti ti-upload"></i> ファイルを選択</button>
+      ${_restorePending?`
+      <div style="margin-top:10px;padding:10px;background:#FFF4E5;border:1px solid #F0B429;border-radius:8px">
+        <div style="font-size:13px;color:#993C1D;font-weight:600;margin-bottom:8px">「${esc(_restorePending.name)}」で現在のデータを上書きします。元には戻せません。実行しますか？</div>
+        <button class="btn" id="restore-confirm-btn" style="background:#D85A30;color:#fff;border-color:#D85A30">復元実行</button>
+        <button class="btn btn-sm" id="restore-cancel-btn">キャンセル</button>
+      </div>`:''}
+    </div>
   </div>`;
 }
 function adminOt(){
@@ -3716,6 +3747,14 @@ function bindAdmin(){
   // --- データバックアップ ---
   const backupBtn=document.getElementById('manual-backup-btn');
   if(backupBtn)backupBtn.onclick=()=>{exportFullBackup(false);render();};
+  const restorePickBtn=document.getElementById('restore-pick-btn');
+  if(restorePickBtn)restorePickBtn.onclick=()=>document.getElementById('restore-file-input').click();
+  const restoreInput=document.getElementById('restore-file-input');
+  if(restoreInput)restoreInput.onchange=e=>onRestoreFileSelected(e.target.files[0]);
+  const restoreConfirmBtn=document.getElementById('restore-confirm-btn');
+  if(restoreConfirmBtn)restoreConfirmBtn.onclick=confirmRestore;
+  const restoreCancelBtn=document.getElementById('restore-cancel-btn');
+  if(restoreCancelBtn)restoreCancelBtn.onclick=cancelRestore;
   // --- 稼働開始リセット ---
   const clearOpBtn=document.getElementById('clear-op-data');
   if(clearOpBtn)clearOpBtn.onclick=()=>{document.getElementById('clear-op-confirm').style.display='inline-flex';clearOpBtn.style.display='none';};

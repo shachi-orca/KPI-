@@ -684,6 +684,21 @@ function exportTabHTML(){
         <button class="btn btn-primary btn-sm" id="exp-all"><i class="ti ti-download"></i> 保存する</button>
       </div>
       <div style="display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg)">
+        <i class="ti ti-upload" style="font-size:28px;color:var(--accent);flex-shrink:0"></i>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:13px">バックアップから復元する</div>
+          <div style="font-size:12px;color:var(--text-2);margin-top:2px">保存したバックアップJSONファイルを選択すると、現在のデータが上書きされます（外部送信なし）。</div>
+        </div>
+        <input type="file" id="restore-file-input" accept="application/json" style="display:none">
+        <button class="btn btn-sm" id="restore-pick-btn"><i class="ti ti-upload"></i> ファイルを選択</button>
+      </div>
+      ${_restorePending?`
+      <div style="padding:12px;background:#FFF4E5;border:1px solid #F0B429;border-radius:var(--r)">
+        <div style="font-size:13px;color:#993C1D;font-weight:600;margin-bottom:8px">「${esc(_restorePending.name)}」で現在のデータを上書きします。元には戻せません。実行しますか？</div>
+        <button class="btn btn-sm" id="restore-confirm-btn" style="background:#D85A30;color:#fff;border-color:#D85A30">復元実行</button>
+        <button class="btn btn-sm" id="restore-cancel-btn">キャンセル</button>
+      </div>`:''}
+      <div style="display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg)">
         <i class="ti ti-package" style="font-size:28px;color:var(--text-2);flex-shrink:0"></i>
         <div style="flex:1">
           <div style="font-weight:600;font-size:13px">商材リストだけを保存</div>
@@ -828,6 +843,10 @@ function bind(){
   document.querySelectorAll('[data-da]').forEach(el=>{el.addEventListener('click',()=>{D.assignments=D.assignments.filter(a=>a.id!==el.dataset.da);svData();toast('削除しました','ok');render();});});
   // Export / Import
   document.getElementById('exp-all')?.addEventListener('click',()=>{exportFullBackup(false);render();});
+  document.getElementById('restore-pick-btn')?.addEventListener('click',()=>document.getElementById('restore-file-input').click());
+  document.getElementById('restore-file-input')?.addEventListener('change',e=>onRestoreFileSelected(e.target.files[0]));
+  document.getElementById('restore-confirm-btn')?.addEventListener('click',confirmRestore);
+  document.getElementById('restore-cancel-btn')?.addEventListener('click',cancelRestore);
   document.getElementById('exp-prod')?.addEventListener('click',()=>expJSON('crm_products',{products:D.products}));
   document.getElementById('exp-csv')?.addEventListener('click',expCSV);
   document.getElementById('impbtn')?.addEventListener('click',()=>{
@@ -961,6 +980,25 @@ function checkAutoBackup(){
   const t=parseInt(localStorage.getItem(BACKUP_KEY)||'0');
   if(Date.now()-t>BACKUP_INTERVAL_MS)exportFullBackup(true);
 }
+let _restorePending=null; // {text, name}
+function onRestoreFileSelected(file){
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    let parsed;
+    try{parsed=JSON.parse(reader.result);}catch{toast('JSONファイルを読み込めませんでした','error');return;}
+    if(!parsed||typeof parsed!=='object'||!('customers' in parsed)||!('contacts' in parsed)){toast('CRMシステムのバックアップファイルではないようです','error');return;}
+    _restorePending={text:reader.result,name:file.name};
+    render();
+  };
+  reader.readAsText(file);
+}
+function confirmRestore(){
+  if(!_restorePending)return;
+  localStorage.setItem(CRM_KEY,_restorePending.text);
+  location.reload();
+}
+function cancelRestore(){_restorePending=null;render();}
 function expCSV(){
   const h=['ID','顧客名','会社名','役職','電話番号','メール','住所','ステータス','タグ','登録日'];
   const rows=D.customers.map(c=>[c.id,c.name,c.company||'',c.role||'',c.tel||'',c.email||'',c.address||'',c.status,(c.tags||[]).join('|'),fmtD(c.createdAt)]);

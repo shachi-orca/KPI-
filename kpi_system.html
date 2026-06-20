@@ -284,7 +284,7 @@ let state={
   otRequests:[], // 残業申請：[{id,si,date,hours,reason,status,by}]
   leaveRequests:[], // 有給申請：[{id,si,date,reason,status,by}]
   shifts:{}, // シフト：{si:{'YYYY-MM-DD':code}}
-  dashStaff:0,dashKpi:'コール数',dashChart:null,
+  dashStaff:0,dashKpi:'コール数',dashChart:null,trendChart:null,
   alertAck:{}, // 確認済みアラートキー {key: true}
   shiftNotify:{}, // シフト変更通知：{si:[{ds,code}]} 次回ログイン時に表示
   otNotify:{}, // 残業承認通知：{si:[{date,hours,status:'approved'|'rejected'}]}
@@ -304,8 +304,11 @@ let state={
 
 // ランダム整数（min以上max以下）
 function rnd(min,max){return Math.floor(Math.random()*(max-min+1))+min;}
-// 上限付きランダム（0〜upper の整数、率をpct%以下に抑える）
-function rndBelow(upper,pctMax){return Math.min(upper,Math.floor(upper*(rnd(0,pctMax)/100)));}
+// 上限付きランダム（0〜upper の整数、率をpct%以下に抑える）。floorMin指定時は upper>0 なら結果を最低1に補正
+function rndBelow(upper,pctMax,floorMin){
+  const v=Math.min(upper,Math.floor(upper*(rnd(0,pctMax)/100)));
+  return floorMin&&upper>0?Math.max(1,v):v;
+}
 
 // HTMLエスケープ（innerHTML挿入時のXSS対策）
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -420,7 +423,7 @@ function exportLeaveCSV(){
 /* ===== データ永続化（LocalStorage） ===== */
 const PERSIST_KEY='kpiSystemState_v2'; // v2: データを期間（年_月）キーで保持
 // 実行時オブジェクト・一時UI状態は保存対象外（dashChartは循環参照のため必ず除外）
-const NO_PERSIST=['dashChart','clockInterval','_dashDrawChart','greetingMsg','greetingType','_prefillOtDate','_prefillLvDate'];
+const NO_PERSIST=['dashChart','trendChart','clockInterval','_dashDrawChart','greetingMsg','greetingType','_prefillOtDate','_prefillLvDate'];
 let _saveTimer=null;
 
 // stateをLocalStorageへ保存（render()ごとに呼ぶ）
@@ -610,8 +613,9 @@ function genDayData(v){
   if(v['コール数']===undefined){
     const call=rnd(20,60),app=rnd(10,40);
     const cCont=rndBelow(call,80),aCont=rndBelow(app,80);
-    const done=rndBelow(Math.min(call,app),60),closing=rndBelow(done,70);
-    const req=rndBelow(closing,70),confirm=rndBelow(req,80),contract=rndBelow(confirm,60);
+    // 下流（完了数〜契約数）は上流が1以上ある限り0に落ちないよう下限を保証（ファネル下流の0偏り対策）
+    const done=rndBelow(Math.min(call,app),60,true),closing=rndBelow(done,70,true);
+    const req=rndBelow(closing,70,true),confirm=rndBelow(req,80,true),contract=rndBelow(confirm,60,true);
     const cancel=rnd(0,Math.max(1,Math.floor(contract*0.2)));
     v['コール数']=call;v['アプローチ数']=app;v['対コールコンタクト数']=cCont;v['対アプローチコンタクト数']=aCont;
     v['完了数']=done;v['クロージング数']=closing;v['依頼数']=req;v['後確数']=confirm;v['契約数']=contract;v['解約数']=cancel;
@@ -631,8 +635,38 @@ function ensurePeriodData(yy,mm){
   const dim=new Date(yy,mm+1,0).getDate();const pm=state.kpiData[key];
   STAFF_LIST.forEach((_,si)=>{if(!pm[si])pm[si]={};for(let d=1;d<=dim;d++){if(!pm[si][d])pm[si][d]={};genDayData(pm[si][d]);}});
 }
+// 目標のサンプル初期値（ファネル構造：コール数→契約数の順に小さくなる）
+function goalBaseSample(){
+  return{
+    'コール数':rnd(800,1200),'アプローチ数':rnd(400,700),
+    '対コールコンタクト数':rnd(300,600),'対アプローチコンタクト数':rnd(200,400),
+    '完了数':rnd(150,300),'クロージング数':rnd(80,180),
+    '依頼数':rnd(50,120),'後確数':rnd(30,90),
+    '契約数':rnd(15,50),'解約数':rnd(0,10)
+  };
+}
+// 指定期間(年,月0-index)の目標を用意（複数月トレンドグラフ参照用・未来月は除外）
+function ensurePeriodGoals(yy,mm){
+  const cur=REAL_Y*12+REAL_M,vp=yy*12+mm;if(vp>cur)return;
+  const key=yy+'_'+mm;if(!state.goals[key])state.goals[key]={};
+  const pg=state.goals[key];
+  STAFF_LIST.forEach((_,si)=>{
+    if(!pg[si])pg[si]={};
+    if(!state._noSample){const gb=goalBaseSample();KPI_ACT.forEach(k=>{if(pg[si][k]===undefined)pg[si][k]=gb[k];});}
+  });
+}
 // 指定期間のKPI月合計
 function periodSum(yy,mm,si,kpi){const pm=state.kpiData[yy+'_'+mm];if(!pm||!pm[si])return 0;let t=0;const dim=new Date(yy,mm+1,0).getDate();for(let d=1;d<=dim;d++)t+=(pm[si][d]&&pm[si][d][kpi])||0;return t;}
+function periodSumAll(yy,mm,kpi){let t=0;STAFF_LIST.forEach((_,si)=>t+=periodSum(yy,mm,si,kpi));return t;}
+// 指定期間の目標値
+function periodGoal(yy,mm,si,kpi){const g=state.goals[yy+'_'+mm];return(g&&g[si]&&g[si][kpi])||0;}
+function periodGoalAll(yy,mm,kpi){let t=0;STAFF_LIST.forEach((_,si)=>t+=periodGoal(yy,mm,si,kpi));return t;}
+// 閲覧中月から遡ったnヶ月分の[年,月0-index]配列（古い→新しい順）
+function trendMonths(n){
+  const arr=[];let y=state.viewYear,m=state.viewMonth;
+  for(let i=0;i<n;i++){arr.unshift([y,m]);m--;if(m<0){m=11;y--;}}
+  return arr;
+}
 // 閲覧中月の前月（年,月0-index）
 function prevYM(){let y=state.viewYear,m=state.viewMonth-1;if(m<0){m=11;y--;}return[y,m];}
 // 前月比の表示（cur vs prev）
@@ -655,13 +689,7 @@ function initKpi(){
     if(!gData()[si])gData()[si]={};
     if(!IS_FUTURE){
       // 目標もファネル構造で設定（コール数→契約数の順に小さくなるように）
-      const goalBase={
-        'コール数':rnd(800,1200),'アプローチ数':rnd(400,700),
-        '対コールコンタクト数':rnd(300,600),'対アプローチコンタクト数':rnd(200,400),
-        '完了数':rnd(150,300),'クロージング数':rnd(80,180),
-        '依頼数':rnd(50,120),'後確数':rnd(30,90),
-        '契約数':rnd(15,50),'解約数':rnd(0,10)
-      };
+      const goalBase=goalBaseSample();
       if(!state._noSample)KPI_ACT.forEach(k=>{if(!gData()[si][k])gData()[si][k]=goalBase[k];});
       // 完了した過去日にサンプル打刻を生成（当月=昨日まで / 過去月=月末まで）。初回のみ
       if(firstGen&&!state._noSample){
@@ -953,6 +981,7 @@ function render(){
   (function(){const p=prevYM();ensurePeriodData(p[0],p[1]);})(); // 前月比トレンド用に前月データを用意
   saveState();
   if(state.dashChart){state.dashChart.destroy();state.dashChart=null;}
+  if(state.trendChart){state.trendChart.destroy();state.trendChart=null;}
   const root=document.getElementById('root');
   if(state.page==='login'){root.innerHTML=loginHTML();bindLogin();return;}
   if(state.page==='pwchange'){root.innerHTML=pwchangeHTML();bindPwChange();return;}
@@ -1139,9 +1168,11 @@ function appHTML(){
 /* ===== 期間ナビ（年＋月切替） ===== */
 function periodNavHTML(){
   const months=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
-  const years=[];
-  for(let y=REAL_Y-2;y<=REAL_Y;y++)years.push(y); // 当年＋過去2年
-  if(!years.includes(state.viewYear))years.unshift(state.viewYear); // 選択中が範囲外なら先頭に追加
+  // データが存在する年＋当年＋選択中の年を範囲に（ハードコードせず、データがある限り遡れるようにする）
+  const yearSet=new Set([REAL_Y,state.viewYear]);
+  Object.keys(state.kpiData).forEach(k=>{const y=parseInt(k.split('_')[0]);if(!isNaN(y))yearSet.add(y);});
+  Object.keys(state.goals).forEach(k=>{const y=parseInt(k.split('_')[0]);if(!isNaN(y))yearSet.add(y);});
+  const years=[...yearSet].sort((a,b)=>a-b);
   const atMax=(state.viewYear*12+state.viewMonth)>=(REAL_Y*12+REAL_M); // 当月以降は「次」不可（未来は閲覧しない）
   return `<div class="period-nav">
     <button class="pn-btn" id="pn-prev" title="前の月"><i class="ti ti-chevron-left"></i></button>
@@ -2584,6 +2615,16 @@ function dashboardPage(){
     <div class="chart-wrap"><canvas id="dash-chart"></canvas></div>
   </div>
 
+  <!-- 目標トレンドグラフ（直近6ヶ月） -->
+  <div class="card">
+    <div class="section-title">${kpi} — 目標トレンド（直近6ヶ月）</div>
+    <div style="display:flex;gap:16px;margin-bottom:8px;font-size:11px;color:var(--text-secondary)">
+      <span><span style="display:inline-block;width:14px;height:3px;background:#185FA5;border-radius:2px;vertical-align:middle;margin-right:4px"></span>実績</span>
+      <span><span style="display:inline-block;width:14px;height:0;border-top:2px dashed #aaa;vertical-align:middle;margin-right:4px"></span>目標</span>
+    </div>
+    <div class="chart-wrap"><canvas id="trend-chart"></canvas></div>
+  </div>
+
   <!-- 全KPI達成状況（リアルタイム更新対象） -->
   <div class="card">
     <div class="section-title">全KPI達成状況 — <span id="dash-name">${STAFF_LIST[si]}</span></div>
@@ -2737,6 +2778,26 @@ function bindDashboard(){
   };
   setTimeout(drawChart,80);
 
+  // 目標トレンドグラフ（直近6ヶ月）
+  const drawTrendChart=()=>{
+    const canvas=document.getElementById('trend-chart');if(!canvas)return;
+    const si=state.role==='admin'?state.dashStaff:state.user;if(si==='total')return;
+    const kpi=state.dashKpi;
+    const months=trendMonths(6);
+    months.forEach(([yy,mm])=>{ensurePeriodData(yy,mm);ensurePeriodGoals(yy,mm);});
+    const labels=months.map(([yy,mm])=>`${yy}/${mm+1}`);
+    const actuals=months.map(([yy,mm])=>periodSum(yy,mm,si,kpi));
+    const targets=months.map(([yy,mm])=>periodGoal(yy,mm,si,kpi));
+    if(state.trendChart)state.trendChart.destroy();
+    state.trendChart=new Chart(canvas,{type:'line',data:{labels,datasets:[
+      {label:'実績',data:actuals,borderColor:'#185FA5',backgroundColor:'rgba(24,95,165,0.07)',fill:true,tension:.3,pointRadius:3,pointHoverRadius:6,pointBackgroundColor:'#185FA5'},
+      {label:'目標',data:targets,borderColor:'#aaa',borderDash:[5,5],fill:false,pointRadius:0,tension:0}
+    ]},options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{y:{beginAtZero:true}}}});
+  };
+  setTimeout(drawTrendChart,80);
+
   // ===== リアルタイム入力処理 =====
   document.querySelectorAll('[data-rt-si]').forEach(inp=>{
     inp.oninput=e=>{
@@ -2856,6 +2917,14 @@ function teamPage(){
     ${['コール数','アプローチ数','契約数','クロージング数'].map(k=>`<button class="toggle-btn ${kpi===k?'active':''}" data-tkpi="${k}">${k}</button>`).join('')}
     <span style="margin-left:auto;font-size:13px;font-weight:600">前月比 ${(()=>{const _pv=prevYM();const tp=STAFF_LIST.reduce((a,_,i)=>a+periodSum(_pv[0],_pv[1],i,kpi),0);return trendHTML(sumKpiAll(kpi),tp);})()}</span>
   </div>
+  <div class="card" style="margin-bottom:14px">
+    <div class="section-title">${kpi} — チーム目標トレンド（直近6ヶ月）</div>
+    <div style="display:flex;gap:16px;margin-bottom:8px;font-size:11px;color:var(--text-secondary)">
+      <span><span style="display:inline-block;width:14px;height:3px;background:#185FA5;border-radius:2px;vertical-align:middle;margin-right:4px"></span>チーム実績</span>
+      <span><span style="display:inline-block;width:14px;height:0;border-top:2px dashed #aaa;vertical-align:middle;margin-right:4px"></span>チーム目標</span>
+    </div>
+    <div class="chart-wrap"><canvas id="team-trend-chart"></canvas></div>
+  </div>
   <div class="tabs">
     <div class="tab ${state.teamTab==='rank'?'active':''}" data-ttab="rank">ランキング</div>
     <div class="tab ${state.teamTab==='table'?'active':''}" data-ttab="table">全員比較表</div>
@@ -2889,6 +2958,25 @@ function bindTeam(){
   document.querySelectorAll('[data-ack-key]').forEach(btn=>{btn.onclick=()=>{if(!state.alertAck)state.alertAck={};state.alertAck[btn.dataset.ackKey]=true;saveState();render();};});
   const clearAll=document.getElementById('alert-clear-all');
   if(clearAll)clearAll.onclick=()=>{state.alertAck={};saveState();render();};
+
+  // チーム目標トレンドグラフ（直近6ヶ月）
+  const drawTeamTrendChart=()=>{
+    const canvas=document.getElementById('team-trend-chart');if(!canvas)return;
+    const kpi=state.teamKpi;
+    const months=trendMonths(6);
+    months.forEach(([yy,mm])=>{ensurePeriodData(yy,mm);ensurePeriodGoals(yy,mm);});
+    const labels=months.map(([yy,mm])=>`${yy}/${mm+1}`);
+    const actuals=months.map(([yy,mm])=>periodSumAll(yy,mm,kpi));
+    const targets=months.map(([yy,mm])=>periodGoalAll(yy,mm,kpi));
+    if(state.trendChart)state.trendChart.destroy();
+    state.trendChart=new Chart(canvas,{type:'line',data:{labels,datasets:[
+      {label:'チーム実績',data:actuals,borderColor:'#185FA5',backgroundColor:'rgba(24,95,165,0.07)',fill:true,tension:.3,pointRadius:3,pointHoverRadius:6,pointBackgroundColor:'#185FA5'},
+      {label:'チーム目標',data:targets,borderColor:'#aaa',borderDash:[5,5],fill:false,pointRadius:0,tension:0}
+    ]},options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{y:{beginAtZero:true}}}});
+  };
+  setTimeout(drawTeamTrendChart,80);
 }
 function bindTimeline(){
   document.querySelectorAll('[data-tlkpi]').forEach(el=>{el.onclick=()=>{state.tlKpi=el.dataset.tlkpi;render();};});

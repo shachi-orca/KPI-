@@ -206,17 +206,69 @@ function toast(msg,type=''){
   el.textContent=msg;el.classList.add('show');
   clearTimeout(_tt);_tt=setTimeout(()=>el.classList.remove('show'),3000);
 }
+function blockNav(){
+  if(isRecording){toast('録画を停止してから移動してください','error');return true;}
+  if(!pendingLog)return false;
+  toast('対応内容を保存してから移動してください','error');return true;
+}
 function esc(s){const d=document.createElement('div');d.textContent=String(s??'');return d.innerHTML;}
 function p2(n){return String(n).padStart(2,'0');}
 function fmtD(ts){if(!ts)return'';const d=new Date(ts);return`${d.getFullYear()}/${p2(d.getMonth()+1)}/${p2(d.getDate())}`;}
 function fmtDT(ts){if(!ts)return'';const d=new Date(ts);return`${d.getFullYear()}/${p2(d.getMonth()+1)}/${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;}
+function toLocalDT(ts){const d=new Date(ts);return`${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`;}
 function staffName(si){return ldKpi()?._staffList?.[si]||`スタッフ${si}`;}
 function prodName(pid){return D.products.find(p=>p.id===pid)?.name||pid;}
 function lastContact(cid){const h=[...D.contacts.filter(h=>h.cid===cid)].sort((a,b)=>b.at-a.at);return h[0]?.at?fmtD(h[0].at):'';}
 function statusBadge(s){const m={'未対応':'bd','優先対応':'bp','対応中':'bw','完了':'bs'};return`<span class="badge ${m[s]||'bd'}">${esc(s)}</span>`;}
 
+// ── 電話・メール・Web会議の発信アクション ──
+// 現状はOS既定のソフトフォン/メールソフトに委ねる実装。CTI/会議APIを契約したら、ここだけ差し替える。
+function callNumber(tel){if(!tel)return;location.href='tel:'+tel;}
+function composeMail(email){if(!email)return;location.href='mailto:'+email;}
+function openMeeting(url){if(!url)return;window.open(url,'_blank','noopener');}
+
+// ── Web会議の画面録画（ブラウザの画面共有機能を使用。この端末にのみ保存・外部送信なし） ──
+let isRecording=false,mediaRecorder=null,recordedChunks=[],recordingStream=null;
+function recFnameStamp(){const d=new Date();return`${d.getFullYear()}${p2(d.getMonth()+1)}${p2(d.getDate())}_${p2(d.getHours())}${p2(d.getMinutes())}`;}
+async function startRecording(){
+  try{
+    recordingStream=await navigator.mediaDevices.getDisplayMedia({video:true,audio:true});
+  }catch(e){
+    toast('録画を開始できませんでした（共有がキャンセルされたか、未対応の環境です）','error');
+    return;
+  }
+  recordedChunks=[];
+  const mimeType=(window.MediaRecorder&&MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus'))?'video/webm;codecs=vp9,opus':'video/webm';
+  mediaRecorder=new MediaRecorder(recordingStream,{mimeType});
+  mediaRecorder.ondataavailable=e=>{if(e.data.size>0)recordedChunks.push(e.data);};
+  recordingStream.getVideoTracks()[0].addEventListener('ended',()=>{if(isRecording)stopRecording();}); // ブラウザ側の「共有を停止」操作にも対応
+  mediaRecorder.start();
+  isRecording=true;
+  render();
+}
+function stopRecording(){
+  if(!mediaRecorder||mediaRecorder.state==='inactive')return;
+  const cust=D.customers.find(x=>x.id===ui.dcid);
+  const fname=`録画_${(cust?.name||'顧客').replace(/[\\/:*?"<>|]/g,'_')}_${recFnameStamp()}.webm`;
+  mediaRecorder.onstop=()=>{
+    recordingStream.getTracks().forEach(t=>t.stop());
+    const blob=new Blob(recordedChunks,{type:'video/webm'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download=fname;
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url),2000);
+    isRecording=false;
+    pendingLog={type:'record'};
+    render();
+    const ta=document.getElementById('hcontent');
+    if(ta)ta.value=(ta.value?ta.value+'\n':'')+`[録画ファイル: ${fname}]`;
+  };
+  mediaRecorder.stop();
+}
+
 // ── State ──
 let sess=null,pg='portal';
+let pendingLog=null; // {type:'call'|'mail'|'meeting'} 発信/メール作成/会議参加後、対応記録を保存するまで他ページへの移動をブロックする
 let ui={
   portalStaff:'all',
   ctx:null,         // {si,year,month,pid} from portal card
@@ -229,6 +281,7 @@ let ui={
 // ── Render ──
 function render(){
   sess=lsess();
+  if(sess&&!_backupChecked){_backupChecked=true;checkAutoBackup();}
   document.getElementById('app').innerHTML=sess?appHTML():loginHTML();
   bind();
 }
@@ -412,7 +465,7 @@ function detailHTML(){
   const apoMin=apoActive?Math.max(0,Math.round((apo.at-apoNow)/60000)):0;
   const apoSi=adm?(apo?.si??dSi):sess.user;
   const apoStaffOpts=adm?sl.map((n,i)=>`<option value="${i}"${i===apoSi?' selected':''}>${esc(n)}</option>`).join(''):`<option value="${sess.user}">${esc(sess.name)}</option>`;
-  const apoVal=apoActive?new Date(apo.at).toISOString().slice(0,16):'';
+  const apoVal=apoActive?toLocalDT(apo.at):'';
 
   const ymFields=adm
     ?`<div style="margin-top:6px;font-size:12px;color:var(--text-3)">年月: <input type="number" id="hy" value="${dY}" style="width:60px;border:1px solid var(--border);border-radius:4px;padding:2px 4px;font-size:12px"> 年 <input type="number" id="hm" value="${dM}" style="width:40px;border:1px solid var(--border);border-radius:4px;padding:2px 4px;font-size:12px"> 月</div>`
@@ -420,7 +473,15 @@ function detailHTML(){
 
   const cstatOpts=`<option value="">変更なし</option>`+STATUSES.map(s=>`<option value="${s}">${s}</option>`).join('');
 
+  const plLabel={call:'発信',mail:'メール作成',meeting:'Web会議参加',record:'録画'};
+  const pendingBanner=pendingLog?`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--bg-warning);border:1.5px solid #FDE68A;color:var(--text-warning);border-radius:var(--r);padding:10px 14px;margin-bottom:14px">
+    <i class="ti ti-alert-circle" style="font-size:18px"></i>
+    <span style="font-size:13px;font-weight:600;flex:1">「${plLabel[pendingLog.type]||'発信'}」操作を行いました。下の「新規対応入力」に対応内容を保存してから他のページに移動してください。</span>
+    <button class="btn btn-ghost btn-sm" id="pl-cancel" style="color:var(--text-warning)">対応記録をキャンセル</button>
+  </div>`:'';
+
   return`<div class="page">
+  ${pendingBanner}
   <div class="detail-head">
     <button class="btn btn-ghost btn-sm" id="back-btn"><i class="ti ti-arrow-left"></i> 一覧へ戻る</button>
     <div class="detail-title">${esc(c.name)}</div>
@@ -448,6 +509,7 @@ function detailHTML(){
               ${apo.note?`<div style="font-size:13px;color:var(--text-2);font-weight:500">${esc(apo.note)}</div>`:''}
             </div>
             <div style="font-size:12px;color:var(--text-3);margin-top:5px">担当: ${esc(staffName(apo.si)||'')}</div>
+            ${apo.mtg?`<button class="btn btn-primary btn-sm" style="margin-top:8px" data-meeting="${esc(apo.mtg)}"><i class="ti ti-video"></i> Web会議に参加</button>`:''}
           </div>`:'<div style="font-size:13px;color:var(--text-3)">設定なし</div>'}
         </div>
         <div>
@@ -456,9 +518,9 @@ function detailHTML(){
           ${c.role?`<div class="irow"><span class="ikey">役職</span><span class="ival">${esc(c.role)}</span></div>`:''}
           ${c.postalCode?`<div class="irow"><span class="ikey">郵便番号</span><span class="ival">〒${esc(c.postalCode)}</span></div>`:''}
           ${(c.address)?`<div class="irow"><span class="ikey">住所</span><span class="ival">${esc(c.address)}</span></div>`:''}
-          <div class="irow"><span class="ikey">電話番号</span><span class="ival">${c.tel?`<span style="font-size:15px;font-weight:700;letter-spacing:.5px">${esc(c.tel)}</span><button class="cpbtn" data-cp="${esc(c.tel)}"><i class="ti ti-copy"></i></button>`:'—'}</span></div>
-          ${c.tel2?`<div class="irow"><span class="ikey">連絡先</span><span class="ival">${esc(c.tel2)}<button class="cpbtn" data-cp="${esc(c.tel2)}"><i class="ti ti-copy"></i></button></span></div>`:''}
-          <div class="irow"><span class="ikey">メール</span><span class="ival">${c.email?`${esc(c.email)}<button class="cpbtn" data-cp="${esc(c.email)}"><i class="ti ti-copy"></i></button>`:'—'}</span></div>
+          <div class="irow"><span class="ikey">電話番号</span><span class="ival">${c.tel?`<span style="font-size:15px;font-weight:700;letter-spacing:.5px">${esc(c.tel)}</span><button class="cpbtn" data-cp="${esc(c.tel)}"><i class="ti ti-copy"></i></button><button class="cpbtn" data-call="${esc(c.tel)}" title="発信する"><i class="ti ti-phone-outgoing"></i></button>`:'—'}</span></div>
+          ${c.tel2?`<div class="irow"><span class="ikey">連絡先</span><span class="ival">${esc(c.tel2)}<button class="cpbtn" data-cp="${esc(c.tel2)}"><i class="ti ti-copy"></i></button><button class="cpbtn" data-call="${esc(c.tel2)}" title="発信する"><i class="ti ti-phone-outgoing"></i></button></span></div>`:''}
+          <div class="irow"><span class="ikey">メール</span><span class="ival">${c.email?`${esc(c.email)}<button class="cpbtn" data-cp="${esc(c.email)}"><i class="ti ti-copy"></i></button><button class="cpbtn" data-mail="${esc(c.email)}" title="メール作成"><i class="ti ti-mail"></i></button>`:'—'}</span></div>
           ${tags?`<div class="irow"><span class="ikey">タグ</span><span class="ival">${tags}</span></div>`:''}
           <div class="irow"><span class="ikey">最新対応日</span><span class="ival" style="font-weight:600">${lastContact(c.id)||'—'}</span></div>
         </div>
@@ -470,6 +532,9 @@ function detailHTML(){
           <div class="fg"><label class="fl">担当者</label><select class="sel w-full" id="apo-si">${apoStaffOpts}</select></div>
           <div class="fg"><label class="fl">メモ（任意）</label><input class="fc" id="apo-note" value="${esc(apo?.note||'')}" placeholder="例: 初回提案"></div>
         </div>
+        <div class="frow">
+          <div class="fg" style="flex:1"><label class="fl">Web会議URL（任意）</label><input class="fc" id="apo-mtg" value="${esc(apo?.mtg||'')}" placeholder="https://zoom.us/j/... など"></div>
+        </div>
         <div style="display:flex;gap:8px">
           <button class="btn btn-primary" style="flex:1;justify-content:center" id="apo-save" data-cid="${c.id}"><i class="ti ti-calendar-check"></i> ${apoActive?'更新する':'設定する'}</button>
           ${apoActive?`<button class="btn btn-danger btn-sm" id="apo-del" data-cid="${c.id}"><i class="ti ti-trash"></i></button>`:''}
@@ -479,6 +544,13 @@ function detailHTML(){
     <div>
       <div class="panel">
         <div class="panel-title"><i class="ti ti-pencil-plus"></i> 新規対応入力</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:10px 12px;background:var(--bg);border-radius:var(--r)">
+          ${isRecording
+            ?`<span style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--danger)"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--danger);animation:fadeIn 1s infinite alternate"></span>録画中</span>
+               <button class="btn btn-sm" id="rec-stop" style="color:var(--danger)"><i class="ti ti-player-stop-filled"></i> 録画停止</button>`
+            :`<button class="btn btn-sm" id="rec-start"><i class="ti ti-video"></i> Web会議の録画を開始</button>
+               <span class="tip">画面・タブ共有を選んで録画します（この端末に保存のみ）</span>`}
+        </div>
         <div class="frow">
           <div class="fg"><label class="fl">日時</label><input type="datetime-local" class="fc" id="hdt" value="${dDt}"></div>
           <div class="fg"><label class="fl">担当者</label><select class="sel w-full" id="hsi">${staffOpts}</select></div>
@@ -607,7 +679,7 @@ function exportTabHTML(){
         <i class="ti ti-database-export" style="font-size:28px;color:var(--accent);flex-shrink:0"></i>
         <div style="flex:1">
           <div style="font-weight:600;font-size:13px">すべてのデータをまとめて保存</div>
-          <div style="font-size:12px;color:var(--text-2);margin-top:2px">顧客・履歴・商材・割り当てをまるごとバックアップ。<br>後で復元するときはこれを使います。</div>
+          <div style="font-size:12px;color:var(--text-2);margin-top:2px">顧客・履歴・商材・割り当てをまるごとバックアップ。<br>後で復元するときはこれを使います。<br>ログアウト時・12時間以上経過後のログイン時には自動でも保存されます（外部送信なし）。<br><span style="color:var(--text-3)">${lastBackupLabel()}</span></div>
         </div>
         <button class="btn btn-primary btn-sm" id="exp-all"><i class="ti ti-download"></i> 保存する</button>
       </div>
@@ -686,10 +758,10 @@ function bind(){
   document.getElementById('lbtn')?.addEventListener('click',doLogin);
   document.getElementById('lpw')?.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
   // Logout
-  document.getElementById('logout-btn')?.addEventListener('click',()=>{csess();render();});
+  document.getElementById('logout-btn')?.addEventListener('click',()=>{if(blockNav())return;exportFullBackup(true);csess();render();});
   // Top nav
   document.querySelectorAll('[data-nav]').forEach(el=>{
-    el.addEventListener('click',()=>{pg=el.dataset.nav;if(pg==='portal')ui.ctx=null;render();});
+    el.addEventListener('click',()=>{if(blockNav())return;pg=el.dataset.nav;if(pg==='portal')ui.ctx=null;render();});
   });
   // Portal
   document.getElementById('psf')?.addEventListener('change',e=>{ui.portalStaff=e.target.value;render();});
@@ -705,7 +777,7 @@ function bind(){
   document.getElementById('add-cust')?.addEventListener('click',()=>{ui.modal='add-cust';ui.eid=null;render();});
   document.querySelectorAll('[data-det]').forEach(el=>{el.addEventListener('click',()=>{ui.dcid=parseInt(el.dataset.det);ui.dtab='all';pg='detail';render();});});
   // Detail
-  document.getElementById('back-btn')?.addEventListener('click',()=>{pg='customers';render();});
+  document.getElementById('back-btn')?.addEventListener('click',()=>{if(blockNav())return;pg='customers';render();});
   document.querySelectorAll('[data-ht]').forEach(el=>{el.addEventListener('click',()=>{ui.dtab=el.dataset.ht;render();});});
   // sv-contact → show confirm bar (no save yet)
   document.getElementById('sv-contact')?.addEventListener('click',()=>{
@@ -725,6 +797,12 @@ function bind(){
   // Zip lookup
   document.getElementById('zip-lookup')?.addEventListener('click',lookupZip);
   document.querySelectorAll('[data-cp]').forEach(el=>{el.addEventListener('click',()=>{navigator.clipboard.writeText(el.dataset.cp).then(()=>toast('コピーしました','ok'));});});
+  document.querySelectorAll('[data-call]').forEach(el=>{el.addEventListener('click',()=>{callNumber(el.dataset.call);pendingLog={type:'call'};render();});});
+  document.querySelectorAll('[data-mail]').forEach(el=>{el.addEventListener('click',()=>{composeMail(el.dataset.mail);pendingLog={type:'mail'};render();});});
+  document.querySelectorAll('[data-meeting]').forEach(el=>{el.addEventListener('click',()=>{openMeeting(el.dataset.meeting);pendingLog={type:'meeting'};render();});});
+  document.getElementById('pl-cancel')?.addEventListener('click',()=>{pendingLog=null;render();});
+  document.getElementById('rec-start')?.addEventListener('click',startRecording);
+  document.getElementById('rec-stop')?.addEventListener('click',stopRecording);
   document.querySelectorAll('[data-edit]').forEach(el=>{el.addEventListener('click',()=>{ui.modal='edit-cust';ui.eid=parseInt(el.dataset.edit);render();});});
   // Settings tabs
   document.querySelectorAll('[data-stab]').forEach(el=>{el.addEventListener('click',()=>{ui.stab=el.dataset.stab;render();});});
@@ -749,7 +827,7 @@ function bind(){
   });
   document.querySelectorAll('[data-da]').forEach(el=>{el.addEventListener('click',()=>{D.assignments=D.assignments.filter(a=>a.id!==el.dataset.da);svData();toast('削除しました','ok');render();});});
   // Export / Import
-  document.getElementById('exp-all')?.addEventListener('click',()=>expJSON('crm_all',D));
+  document.getElementById('exp-all')?.addEventListener('click',()=>{exportFullBackup(false);render();});
   document.getElementById('exp-prod')?.addEventListener('click',()=>expJSON('crm_products',{products:D.products}));
   document.getElementById('exp-csv')?.addEventListener('click',expCSV);
   document.getElementById('impbtn')?.addEventListener('click',()=>{
@@ -811,6 +889,7 @@ function saveContact(){
     c.lastAt=at;
     if(contactStatus) c.status=contactStatus;
   }
+  pendingLog=null;
   svData();toast('保存しました','ok');render();
 }
 
@@ -862,6 +941,26 @@ function expJSON(name,data){
   const b=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`${name}_${new Date().toISOString().slice(0,10)}.json`;a.click();
 }
+// ── データバックアップ（端末ローカルのみ・外部送信なし） ──
+const BACKUP_KEY='_crmCustomerLastBackupAt';
+const BACKUP_INTERVAL_MS=12*60*60*1000; // 12時間以上経過していたらログイン時に自動バックアップ
+let _backupChecked=false;
+function lastBackupLabel(){
+  const t=parseInt(localStorage.getItem(BACKUP_KEY)||'0');
+  if(!t)return '（バックアップ未実施）';
+  const d=new Date(t);
+  return '最終バックアップ: '+d.getFullYear()+'/'+p2(d.getMonth()+1)+'/'+p2(d.getDate())+' '+p2(d.getHours())+':'+p2(d.getMinutes());
+}
+function exportFullBackup(silent){
+  svData();
+  expJSON('crm_all',D);
+  localStorage.setItem(BACKUP_KEY,String(Date.now()));
+  if(!silent)toast('バックアップを保存しました','ok');
+}
+function checkAutoBackup(){
+  const t=parseInt(localStorage.getItem(BACKUP_KEY)||'0');
+  if(Date.now()-t>BACKUP_INTERVAL_MS)exportFullBackup(true);
+}
 function expCSV(){
   const h=['ID','顧客名','会社名','役職','電話番号','メール','住所','ステータス','タグ','登録日'];
   const rows=D.customers.map(c=>[c.id,c.name,c.company||'',c.role||'',c.tel||'',c.email||'',c.address||'',c.status,(c.tags||[]).join('|'),fmtD(c.createdAt)]);
@@ -878,9 +977,11 @@ function saveApo(){
   const at=new Date(dt).getTime();
   if(at<Date.now()-60000){toast('過去の日時は設定できません','error');return;}
   const note=(document.getElementById('apo-note')?.value||'').trim();
+  const mtg=(document.getElementById('apo-mtg')?.value||'').trim();
+  if(mtg&&!/^https?:\/\//.test(mtg)){toast('Web会議URLはhttp(s)://から入力してください','error');return;}
   const si=parseInt(document.getElementById('apo-si')?.value??sess?.user??0);
   D.appointments=D.appointments.filter(a=>a.cid!==cid);
-  D.appointments.push({id:'apo'+D._aid++,cid,si,at,note});
+  D.appointments.push({id:'apo'+D._aid++,cid,si,at,note,mtg});
   svData();toast('アポイントを設定しました','ok');render();
 }
 function deleteApo(){
@@ -941,6 +1042,7 @@ D=ldData();
 // URL ?cid= で顧客詳細に直接ジャンプ
 (function(){const p=new URLSearchParams(location.search).get('cid');if(!p)return;const c=D.customers.find(x=>String(x.id)===p);if(c){ui.dcid=c.id;pg='detail';}})();
 render();
+window.addEventListener('beforeunload',e=>{if(!pendingLog&&!isRecording)return;e.preventDefault();e.returnValue='';});
 </script>
 </body>
 </html>

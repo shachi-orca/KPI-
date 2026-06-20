@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>着地スケジュール — デザイン案</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.0.0/dist/tabler-icons.min.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f4f8;padding:20px;color:#1a2332}
+.page-title{font-size:18px;font-weight:800;color:#185FA5;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.page-sub{font-size:12px;color:#6b7a8d;margin-bottom:20px}
+.section-label{font-size:11px;font-weight:700;color:#6b7a8d;letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px;margin-top:24px}
+
+/* ===== 案A: ガントバー型 ===== */
+.card{background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:16px}
+.card-title{font-size:13px;font-weight:700;color:#1a2332;margin-bottom:14px;display:flex;align-items:center;gap:6px}
+.gantt-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #f0f4f8}
+.gantt-row:last-child{border-bottom:none}
+.gantt-label{font-size:12px;width:120px;flex-shrink:0;color:#374151}
+.gantt-track{flex:1;position:relative;height:22px}
+.gantt-bg{position:absolute;inset:0;background:#e8eef5;border-radius:4px;overflow:hidden}
+.gantt-target{position:absolute;top:0;bottom:0;left:0;background:repeating-linear-gradient(90deg,#c3d4e8 0,#c3d4e8 4px,transparent 4px,transparent 8px);border-radius:4px}
+.gantt-actual{position:absolute;top:3px;bottom:3px;left:0;border-radius:3px;transition:width .5s}
+.gantt-today{position:absolute;top:-4px;bottom:-4px;width:2px;background:#D85A30;z-index:10}
+.gantt-today::after{content:'今日';position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:9px;color:#D85A30;font-weight:700;white-space:nowrap}
+.gantt-proj{position:absolute;top:50%;transform:translateY(-50%);width:10px;height:10px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1.5px currentColor;z-index:5}
+.gantt-meta{font-size:11px;width:100px;flex-shrink:0;text-align:right;color:#6b7a8d}
+.gantt-pct{font-size:12px;width:40px;flex-shrink:0;text-align:right;font-weight:700}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid #f0f4f8}
+.legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:#6b7a8d}
+.legend-bar{width:20px;height:8px;border-radius:2px}
+.legend-line{width:20px;height:2px;border-top:2px dashed #999}
+.legend-dot{width:10px;height:10px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1.5px currentColor}
+
+/* ===== 案B: マイルストーン型 ===== */
+.milestone-header{display:flex;margin-bottom:8px}
+.milestone-week{flex:1;text-align:center;font-size:10px;font-weight:700;color:#6b7a8d;padding:0 2px}
+.milestone-row{display:flex;align-items:stretch;margin-bottom:8px;gap:0}
+.milestone-kpi{font-size:11px;width:110px;flex-shrink:0;display:flex;align-items:center;color:#374151;padding-right:8px}
+.milestone-cells{flex:1;display:flex;gap:3px}
+.milestone-cell{flex:1;border-radius:6px;padding:5px 4px;text-align:center;min-height:40px;display:flex;flex-direction:column;justify-content:center}
+.mc-label{font-size:9px;color:rgba(255,255,255,.8);margin-bottom:2px}
+.mc-val{font-size:13px;font-weight:800;color:#fff}
+.mc-sub{font-size:9px;color:rgba(255,255,255,.75);margin-top:1px}
+.mc-future{background:#f0f4f8;color:#b0b8c4}
+.mc-future .mc-label,.mc-future .mc-val,.mc-future .mc-sub{color:#b0b8c4}
+.mc-future .mc-val{font-size:11px}
+
+/* ===== 案C: タイムライン型 ===== */
+.timeline-axis{display:flex;align-items:center;margin-bottom:8px;padding:0 110px 0 0}
+.timeline-tick{flex:1;text-align:center;font-size:9px;color:#9aa4b2}
+.tl-row{display:flex;align-items:center;gap:0;margin-bottom:6px}
+.tl-label{font-size:11px;width:110px;flex-shrink:0;color:#374151}
+.tl-track{flex:1;position:relative;height:28px}
+.tl-bg{position:absolute;inset:4px 0;background:#f0f4f8;border-radius:4px}
+.tl-fill{position:absolute;top:4px;bottom:4px;left:0;border-radius:4px 0 0 4px}
+.tl-pace{position:absolute;top:0;bottom:0;width:1.5px;background:#999;opacity:.5}
+.tl-today-line{position:absolute;top:-2px;bottom:-2px;width:2px;background:#D85A30;z-index:5;border-radius:1px}
+.tl-proj-arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:4}
+.tl-proj-arrow::before{content:'';display:block;width:0;height:0;border-top:5px solid transparent;border-bottom:5px solid transparent}
+.tl-right-meta{font-size:11px;width:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:1px}
+.chip-sm{font-size:10px;padding:1px 6px;border-radius:4px;font-weight:700}
+.on{background:#d1fae5;color:#065f46}
+.warn{background:#fef3c7;color:#92400e}
+.danger{background:#fee2e2;color:#991b1b}
+
+/* tabs */
+.tabs{display:flex;gap:2px;background:#e8eef5;border-radius:8px;padding:3px;margin-bottom:16px;width:fit-content}
+.tab-btn{padding:6px 14px;border-radius:6px;border:none;background:transparent;font-size:12px;font-weight:600;color:#6b7a8d;cursor:pointer;transition:all .15s}
+.tab-btn.active{background:#fff;color:#185FA5;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.badge{font-size:10px;background:#185FA5;color:#fff;border-radius:10px;padding:1px 6px;margin-left:4px}
+</style>
+</head>
+<body>
+
+<div class="page-title"><i class="ti ti-calendar-stats"></i> 月次着地スケジュール — 2026年6月</div>
+<div class="page-sub">目標ペースに対する進捗と月末着地を視覚化。3つのレイアウト案を提示します。</div>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="showTab('a')">案A：ガントバー型</button>
+  <button class="tab-btn" onclick="showTab('b')">案B：マイルストーン型</button>
+  <button class="tab-btn" onclick="showTab('c')">案C：タイムライン型</button>
+</div>
+
+<!-- ===== 案A ===== -->
+<div id="tab-a">
+  <div class="section-label">案A — ガントバー型（KPI別・横棒グラフ＋予測ドット）</div>
+  <div class="card">
+    <div class="card-title"><i class="ti ti-chart-gantt" style="color:#185FA5"></i> 活動KPI 着地スケジュール — 田中 一郎</div>
+
+    <!-- ヘッダー -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;padding:0 0 8px;border-bottom:1px solid #f0f4f8">
+      <div style="width:120px;font-size:10px;font-weight:700;color:#9aa4b2">KPI項目</div>
+      <div style="flex:1;display:flex;justify-content:space-between;font-size:9px;color:#9aa4b2;padding:0 1px">
+        <span>1日</span><span>10日</span><span>18日↑今日</span><span>25日</span><span>30日</span>
+      </div>
+      <div style="width:100px;text-align:right;font-size:10px;color:#9aa4b2">実績/目標</div>
+      <div style="width:40px;text-align:right;font-size:10px;color:#9aa4b2">達成率</div>
+    </div>
+
+    <!-- コール数: 達成ペース並走中 -->
+    <div class="gantt-row">
+      <div class="gantt-label">コール数</div>
+      <div class="gantt-track">
+        <div class="gantt-bg">
+          <div class="gantt-target" style="width:60%"></div>
+          <div class="gantt-actual" style="width:56%;background:#185FA5"></div>
+          <div class="gantt-today" style="left:60%"></div>
+          <div class="gantt-proj" style="left:92%;color:#185FA5;background:#fff"></div>
+        </div>
+      </div>
+      <div class="gantt-meta">1,203 / 1,240</div>
+      <div class="gantt-pct" style="color:#BA7517">97%</div>
+    </div>
+
+    <!-- アプローチ数: ペース遅れ -->
+    <div class="gantt-row">
+      <div class="gantt-label">アプローチ数</div>
+      <div class="gantt-track">
+        <div class="gantt-bg">
+          <div class="gantt-target" style="width:60%"></div>
+          <div class="gantt-actual" style="width:42%;background:#D85A30"></div>
+          <div class="gantt-today" style="left:60%"></div>
+          <div class="gantt-proj" style="left:70%;color:#D85A30;background:#fff"></div>
+        </div>
+      </div>
+      <div class="gantt-meta">702 / 780</div>
+      <div class="gantt-pct" style="color:#D85A30">90%</div>
+    </div>
+
+    <!-- 完了数 -->
+    <div class="gantt-row">
+      <div class="gantt-label">完了数</div>
+      <div class="gantt-track">
+        <div class="gantt-bg">
+          <div class="gantt-target" style="width:60%"></div>
+          <div class="gantt-actual" style="width:63%;background:#1D9E75"></div>
+          <div class="gantt-today" style="left:60%"></div>
+          <div class="gantt-proj" style="left:100%;color:#1D9E75;background:#fff"></div>
+        </div>
+      </div>
+      <div class="gantt-meta">284 / 300</div>
+      <div class="gantt-pct" style="color:#1D9E75">105%</div>
+    </div>
+
+    <!-- 契約数: 100%達成済み -->
+    <div class="gantt-row">
+      <div class="gantt-label">契約数</div>
+      <div class="gantt-track">
+        <div class="gantt-bg">
+          <div class="gantt-target" style="width:60%"></div>
+          <div class="gantt-actual" style="width:100%;background:#1D9E75;opacity:.85"></div>
+          <div class="gantt-today" style="left:60%"></div>
+        </div>
+      </div>
+      <div class="gantt-meta">45 / 40</div>
+      <div class="gantt-pct" style="color:#1D9E75">112%</div>
+    </div>
+
+    <!-- クロージング数 -->
+    <div class="gantt-row">
+      <div class="gantt-label">クロージング数</div>
+      <div class="gantt-track">
+        <div class="gantt-bg">
+          <div class="gantt-target" style="width:60%"></div>
+          <div class="gantt-actual" style="width:16%;background:#D85A30"></div>
+          <div class="gantt-today" style="left:60%"></div>
+          <div class="gantt-proj" style="left:27%;color:#D85A30;background:#fff"></div>
+        </div>
+      </div>
+      <div class="gantt-meta">45 / 165</div>
+      <div class="gantt-pct" style="color:#D85A30">27%</div>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><div class="legend-bar" style="background:#185FA5"></div>実績</div>
+      <div class="legend-item"><div class="legend-bar" style="background:repeating-linear-gradient(90deg,#c3d4e8 0,#c3d4e8 4px,transparent 4px,transparent 8px)"></div>目標ペース</div>
+      <div class="legend-item"><div style="width:2px;height:14px;background:#D85A30;border-radius:1px"></div>今日</div>
+      <div class="legend-item"><div class="legend-dot" style="color:#185FA5;background:#fff"></div>月末予測着地</div>
+    </div>
+  </div>
+
+  <div style="font-size:11px;color:#6b7a8d;padding:0 4px">
+    ✅ <b>向いている用途</b>：各KPIのペース遅れ・先行が一目でわかる。棒の長さで進捗感が直感的。<br>
+    📋 <b>追加できる情報</b>：月末着地予測ドット・目標線・今日の縦線。
+  </div>
+</div>
+
+<!-- ===== 案B ===== -->
+<div id="tab-b" style="display:none">
+  <div class="section-label">案B — マイルストーン型（週次チェックポイント）</div>
+  <div class="card">
+    <div class="card-title"><i class="ti ti-flag" style="color:#185FA5"></i> 週次マイルストーン — 田中 一郎</div>
+
+    <div style="display:flex;margin-bottom:6px;padding-left:110px">
+      <div style="flex:1;text-align:center;font-size:10px;font-weight:700;color:#9aa4b2">第1週<br><span style="font-weight:400">1〜7日</span></div>
+      <div style="flex:1;text-align:center;font-size:10px;font-weight:700;color:#9aa4b2">第2週<br><span style="font-weight:400">8〜14日</span></div>
+      <div style="flex:1;text-align:center;font-size:10px;font-weight:700;color:#185FA5">第3週 ← 今<br><span style="font-weight:400">15〜21日</span></div>
+      <div style="flex:1;text-align:center;font-size:10px;font-weight:700;color:#c0ccd8">第4週<br><span style="font-weight:400">22〜30日</span></div>
+    </div>
+
+    <!-- コール数 -->
+    <div class="milestone-row">
+      <div class="milestone-kpi">コール数</div>
+      <div class="milestone-cells">
+        <div class="milestone-cell" style="background:#1D9E75">
+          <div class="mc-label">目標250</div>
+          <div class="mc-val">268</div>
+          <div class="mc-sub">+7%</div>
+        </div>
+        <div class="milestone-cell" style="background:#BA7517">
+          <div class="mc-label">目標500</div>
+          <div class="mc-val">489</div>
+          <div class="mc-sub">-2%</div>
+        </div>
+        <div class="milestone-cell" style="background:#185FA5">
+          <div class="mc-label">目標750</div>
+          <div class="mc-val">1,203</div>
+          <div class="mc-sub">経過中</div>
+        </div>
+        <div class="milestone-cell mc-future">
+          <div class="mc-label">目標1,240</div>
+          <div class="mc-val">— </div>
+          <div class="mc-sub">予測1,337</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- アプローチ数 -->
+    <div class="milestone-row">
+      <div class="milestone-kpi">アプローチ数</div>
+      <div class="milestone-cells">
+        <div class="milestone-cell" style="background:#1D9E75">
+          <div class="mc-label">目標130</div>
+          <div class="mc-val">142</div>
+          <div class="mc-sub">+9%</div>
+        </div>
+        <div class="milestone-cell" style="background:#D85A30">
+          <div class="mc-label">目標260</div>
+          <div class="mc-val">231</div>
+          <div class="mc-sub">-11%</div>
+        </div>
+        <div class="milestone-cell" style="background:#D85A30">
+          <div class="mc-label">目標390</div>
+          <div class="mc-val">702</div>
+          <div class="mc-sub">経過中</div>
+        </div>
+        <div class="milestone-cell mc-future">
+          <div class="mc-label">目標780</div>
+          <div class="mc-val">—</div>
+          <div class="mc-sub">予測759</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 契約数 -->
+    <div class="milestone-row">
+      <div class="milestone-kpi">契約数</div>
+      <div class="milestone-cells">
+        <div class="milestone-cell" style="background:#1D9E75">
+          <div class="mc-label">目標7</div>
+          <div class="mc-val">10</div>
+          <div class="mc-sub">+43%</div>
+        </div>
+        <div class="milestone-cell" style="background:#1D9E75">
+          <div class="mc-label">目標14</div>
+          <div class="mc-val">32</div>
+          <div class="mc-sub">+128%</div>
+        </div>
+        <div class="milestone-cell" style="background:#1D9E75">
+          <div class="mc-label">目標21</div>
+          <div class="mc-val">45</div>
+          <div class="mc-sub">経過中</div>
+        </div>
+        <div class="milestone-cell mc-future">
+          <div class="mc-label">目標40</div>
+          <div class="mc-val">—</div>
+          <div class="mc-sub">予測49 🎯</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:12px;padding:10px;background:#f0f4f8;border-radius:8px;font-size:12px;color:#374151">
+      <b>凡例：</b>
+      <span style="display:inline-block;background:#1D9E75;color:#fff;border-radius:4px;padding:1px 6px;margin:0 4px">目標達成</span>
+      <span style="display:inline-block;background:#BA7517;color:#fff;border-radius:4px;padding:1px 6px;margin:0 4px">やや遅れ</span>
+      <span style="display:inline-block;background:#D85A30;color:#fff;border-radius:4px;padding:1px 6px;margin:0 4px">要改善</span>
+      <span style="display:inline-block;background:#185FA5;color:#fff;border-radius:4px;padding:1px 6px;margin:0 4px">経過中</span>
+      <span style="display:inline-block;background:#e8eef5;color:#9aa4b2;border-radius:4px;padding:1px 6px;margin:0 4px">未到達</span>
+    </div>
+  </div>
+
+  <div style="font-size:11px;color:#6b7a8d;padding:0 4px">
+    ✅ <b>向いている用途</b>：週ごとに振り返りやすい。1on1や週次MTGに向いたビュー。<br>
+    📋 <b>追加できる情報</b>：週次目標（月次目標÷4で自動計算）・週別コメント。
+  </div>
+</div>
+
+<!-- ===== 案C ===== -->
+<div id="tab-c" style="display:none">
+  <div class="section-label">案C — タイムライン型（スタッフ横断・KGI連携）</div>
+  <div class="card">
+    <div class="card-title"><i class="ti ti-timeline" style="color:#185FA5"></i> 月次着地タイムライン — チーム全体</div>
+
+    <!-- 日付軸 -->
+    <div style="display:flex;align-items:center;padding-left:110px;padding-right:90px;margin-bottom:4px">
+      <div style="flex:1;display:flex;justify-content:space-between;font-size:9px;color:#9aa4b2">
+        <span>1</span><span>5</span><span>10</span><span>15</span><span style="color:#D85A30;font-weight:700">18↑</span><span>20</span><span>25</span><span>30</span>
+      </div>
+    </div>
+
+    <!-- 田中 -->
+    <div class="tl-row">
+      <div class="tl-label" style="font-weight:700;font-size:12px">田中 一郎</div>
+      <div class="tl-track">
+        <div class="tl-bg"></div>
+        <div class="tl-fill" style="width:60%;background:linear-gradient(90deg,#1D9E75,#22c55e)"></div>
+        <div class="tl-pace" style="left:60%"></div>
+        <div class="tl-today-line" style="left:60%"></div>
+        <div class="tl-proj-arrow" style="left:90%"><span style="font-size:10px;color:#1D9E75;font-weight:700">→ 着地: 107%</span></div>
+      </div>
+      <div class="tl-right-meta">
+        <span style="font-weight:700;font-size:13px;color:#1D9E75">97%</span>
+        <span class="chip-sm on">順調</span>
+      </div>
+    </div>
+
+    <!-- 鈴木 -->
+    <div class="tl-row">
+      <div class="tl-label" style="font-weight:700;font-size:12px">鈴木 花子</div>
+      <div class="tl-track">
+        <div class="tl-bg"></div>
+        <div class="tl-fill" style="width:48%;background:linear-gradient(90deg,#f59e0b,#fbbf24)"></div>
+        <div class="tl-pace" style="left:60%"></div>
+        <div class="tl-today-line" style="left:60%"></div>
+        <div class="tl-proj-arrow" style="left:80%"><span style="font-size:10px;color:#BA7517;font-weight:700">→ 着地: 80%</span></div>
+      </div>
+      <div class="tl-right-meta">
+        <span style="font-weight:700;font-size:13px;color:#BA7517">80%</span>
+        <span class="chip-sm warn">要注意</span>
+      </div>
+    </div>
+
+    <!-- 佐藤 -->
+    <div class="tl-row">
+      <div class="tl-label" style="font-weight:700;font-size:12px">佐藤 次郎</div>
+      <div class="tl-track">
+        <div class="tl-bg"></div>
+        <div class="tl-fill" style="width:30%;background:linear-gradient(90deg,#ef4444,#f87171)"></div>
+        <div class="tl-pace" style="left:60%"></div>
+        <div class="tl-today-line" style="left:60%"></div>
+        <div class="tl-proj-arrow" style="left:50%"><span style="font-size:10px;color:#D85A30;font-weight:700">→ 着地: 50%</span></div>
+      </div>
+      <div class="tl-right-meta">
+        <span style="font-weight:700;font-size:13px;color:#D85A30">50%</span>
+        <span class="chip-sm danger">遅延</span>
+      </div>
+    </div>
+
+    <!-- 山田 -->
+    <div class="tl-row">
+      <div class="tl-label" style="font-weight:700;font-size:12px">山田 三郎</div>
+      <div class="tl-track">
+        <div class="tl-bg"></div>
+        <div class="tl-fill" style="width:65%;background:linear-gradient(90deg,#185FA5,#3b82f6)"></div>
+        <div class="tl-pace" style="left:60%"></div>
+        <div class="tl-today-line" style="left:60%"></div>
+        <div class="tl-proj-arrow" style="left:97%"><span style="font-size:10px;color:#185FA5;font-weight:700">→ 着地: 108%</span></div>
+      </div>
+      <div class="tl-right-meta">
+        <span style="font-weight:700;font-size:13px;color:#185FA5">108%</span>
+        <span class="chip-sm on">超過達成</span>
+      </div>
+    </div>
+
+    <div style="border-top:1px solid #f0f4f8;margin-top:10px;padding-top:10px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:11px;color:#6b7a8d">
+      <span>表示KPI：</span>
+      <select style="font-size:11px;border:1px solid #e2e8f0;border-radius:4px;padding:2px 6px;color:#374151">
+        <option>契約数</option>
+        <option>コール数</option>
+        <option>アプローチ数</option>
+      </select>
+      <span style="margin-left:auto;display:flex;gap:10px">
+        <span>│ = 今日のペース目標</span>
+        <span style="color:#D85A30">│ = 今日</span>
+      </span>
+    </div>
+  </div>
+
+  <div style="font-size:11px;color:#6b7a8d;padding:0 4px">
+    ✅ <b>向いている用途</b>：管理者が全スタッフの進捗を一覧。誰が遅れているか瞬時に把握。<br>
+    📋 <b>追加できる情報</b>：KPI切替・着地% のソート・クリックで個人詳細へ遷移。
+  </div>
+</div>
+
+<script>
+function showTab(id){
+  ['a','b','c'].forEach(x=>{
+    document.getElementById('tab-'+x).style.display=x===id?'':'none';
+    document.querySelectorAll('.tab-btn')[['a','b','c'].indexOf(x)].classList.toggle('active',x===id);
+  });
+}
+</script>
+</body>
+</html>

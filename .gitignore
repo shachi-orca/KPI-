@@ -2,3 +2,7 @@
 .env.*
 *.key
 *.pem
+.claude/
+.vscode/
+read_state_test.html
+seed_test.html

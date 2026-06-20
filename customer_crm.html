@@ -227,8 +227,46 @@ function callNumber(tel){if(!tel)return;location.href='tel:'+tel;}
 function composeMail(email){if(!email)return;location.href='mailto:'+email;}
 function openMeeting(url){if(!url)return;window.open(url,'_blank','noopener');}
 
+// ── 録画データのIndexedDB保存（対応履歴からの再生用。容量の大きいBlobはlocalStorageに入れない） ──
+const REC_DB_NAME='crmRecordings',REC_STORE='recordings';
+function idbOpen(){
+  return new Promise((resolve,reject)=>{
+    const req=indexedDB.open(REC_DB_NAME,1);
+    req.onupgradeneeded=()=>{req.result.createObjectStore(REC_STORE);};
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error);
+  });
+}
+async function idbPutRecording(id,blob){
+  const db=await idbOpen();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(REC_STORE,'readwrite');
+    tx.objectStore(REC_STORE).put(blob,id);
+    tx.oncomplete=()=>resolve();
+    tx.onerror=()=>reject(tx.error);
+  });
+}
+async function idbGetRecording(id){
+  const db=await idbOpen();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(REC_STORE,'readonly');
+    const req=tx.objectStore(REC_STORE).get(id);
+    req.onsuccess=()=>resolve(req.result||null);
+    req.onerror=()=>reject(req.error);
+  });
+}
+async function idbDeleteRecording(id){
+  const db=await idbOpen();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(REC_STORE,'readwrite');
+    tx.objectStore(REC_STORE).delete(id);
+    tx.oncomplete=()=>resolve();
+    tx.onerror=()=>reject(tx.error);
+  });
+}
+
 // ── Web会議の画面録画（ブラウザの画面共有機能を使用。この端末にのみ保存・外部送信なし） ──
-let isRecording=false,mediaRecorder=null,recordedChunks=[],recordingStream=null;
+let isRecording=false,mediaRecorder=null,recordedChunks=[],recordingStream=null,_pendingRecId=null;
 function recFnameStamp(){const d=new Date();return`${d.getFullYear()}${p2(d.getMonth()+1)}${p2(d.getDate())}_${p2(d.getHours())}${p2(d.getMinutes())}`;}
 async function startRecording(){
   try{
@@ -250,6 +288,7 @@ function stopRecording(){
   if(!mediaRecorder||mediaRecorder.state==='inactive')return;
   const cust=D.customers.find(x=>x.id===ui.dcid);
   const fname=`録画_${(cust?.name||'顧客').replace(/[\\/:*?"<>|]/g,'_')}_${recFnameStamp()}.webm`;
+  const recId='rec'+Date.now();
   mediaRecorder.onstop=()=>{
     recordingStream.getTracks().forEach(t=>t.stop());
     const blob=new Blob(recordedChunks,{type:'video/webm'});
@@ -257,6 +296,8 @@ function stopRecording(){
     const a=document.createElement('a');a.href=url;a.download=fname;
     document.body.appendChild(a);a.click();document.body.removeChild(a);
     setTimeout(()=>URL.revokeObjectURL(url),2000);
+    idbPutRecording(recId,blob).catch(()=>toast('録画データの保存に失敗しました（ダウンロードしたファイルは保持されています）','error'));
+    _pendingRecId=recId;
     isRecording=false;
     pendingLog={type:'record'};
     render();
@@ -276,6 +317,7 @@ let ui={
   dcid:null,dtab:'all', // detail: customer id, tab
   stab:'products',  // settings tab
   modal:null,eid:null, // modal type, edit customer id
+  playRecId:null,playRecUrl:null, // 録画再生モーダル用
 };
 
 // ── Render ──
@@ -441,6 +483,7 @@ function detailHTML(){
     <div class="tl-meta">${fmtDT(h.at)} &nbsp;${esc(staffName(h.si))}${h.manager?` <span style="color:var(--text-3);font-weight:400">/ 責任者: ${esc(h.manager)}</span>`:''}</div>
     <div class="tl-sub">${h.method?esc(h.method)+' / ':''}${esc(h.reason)} / ${esc(prodName(h.pid))}</div>
     <div class="tl-body">${esc(h.content)}</div>
+    ${h.recId?`<button class="btn btn-sm" data-play-rec="${h.recId}" style="margin-top:6px"><i class="ti ti-player-play"></i> 録画を再生</button>`:''}
   </li>`).join('');
 
   const dSi=adm?(ui.ctx?.si??0):sess.user;
@@ -549,7 +592,7 @@ function detailHTML(){
             ?`<span style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--danger)"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--danger);animation:fadeIn 1s infinite alternate"></span>録画中</span>
                <button class="btn btn-sm" id="rec-stop" style="color:var(--danger)"><i class="ti ti-player-stop-filled"></i> 録画停止</button>`
             :`<button class="btn btn-sm" id="rec-start"><i class="ti ti-video"></i> Web会議の録画を開始</button>
-               <span class="tip">画面・タブ共有を選んで録画します（この端末に保存のみ）</span>`}
+               <span class="tip">画面・タブ共有を選んで録画します（この端末に保存のみ）。保存後は対応履歴から再生できます</span>`}
         </div>
         <div class="frow">
           <div class="fg"><label class="fl">日時</label><input type="datetime-local" class="fc" id="hdt" value="${dDt}"></div>
@@ -730,6 +773,7 @@ function exportTabHTML(){
 
 // ── Modal ──
 function modalHTML(){
+  if(ui.modal==='play-rec')return playRecModalHTML();
   const kpi=ldKpi(),sl=kpi?._staffList||[];
   const ctx=ui.ctx;
   const isEdit=ui.modal==='edit-cust';
@@ -764,6 +808,36 @@ function modalHTML(){
       <div class="mfooter"><button class="btn" id="mcancel"><i class="ti ti-x"></i> キャンセル</button><button class="btn btn-primary" id="msave"><i class="ti ti-device-floppy"></i> ${isEdit?'更新':'登録'}</button></div>
     </div>
   </div>`;
+}
+function playRecModalHTML(){
+  return`<div class="modal-ov" id="mov">
+    <div class="modal">
+      <div class="modal-title"><i class="ti ti-video"></i> 録画を再生</div>
+      ${ui.playRecUrl
+        ?`<video controls autoplay style="width:100%;border-radius:8px;background:#000" src="${ui.playRecUrl}"></video>`
+        :`<div style="padding:30px;text-align:center;color:var(--text-3)">読み込み中...</div>`}
+      <div class="mfooter"><button class="btn btn-danger" id="rec-delete"><i class="ti ti-trash"></i> 録画を削除</button><button class="btn" id="mcancel"><i class="ti ti-x"></i> 閉じる</button></div>
+    </div>
+  </div>`;
+}
+function playRecording(recId){
+  ui.modal='play-rec';ui.playRecId=recId;ui.playRecUrl=null;render();
+  idbGetRecording(recId).then(blob=>{
+    if(!blob){toast('録画データが見つかりませんでした','error');ui.modal=null;render();return;}
+    ui.playRecUrl=URL.createObjectURL(blob);render();
+  }).catch(()=>{toast('録画の読み込みに失敗しました','error');ui.modal=null;render();});
+}
+function deleteRecording(){
+  if(!ui.playRecId)return;
+  idbDeleteRecording(ui.playRecId);
+  D.contacts.forEach(h=>{if(h.recId===ui.playRecId)h.recId=null;});
+  svData();
+  toast('録画を削除しました','ok');
+  closeRecModal();render();
+}
+function closeRecModal(){
+  if(ui.playRecUrl)URL.revokeObjectURL(ui.playRecUrl);
+  ui.modal=null;ui.playRecId=null;ui.playRecUrl=null;
 }
 
 // ── Bind events ──
@@ -815,7 +889,7 @@ function bind(){
   document.querySelectorAll('[data-call]').forEach(el=>{el.addEventListener('click',()=>{callNumber(el.dataset.call);pendingLog={type:'call'};render();});});
   document.querySelectorAll('[data-mail]').forEach(el=>{el.addEventListener('click',()=>{composeMail(el.dataset.mail);pendingLog={type:'mail'};render();});});
   document.querySelectorAll('[data-meeting]').forEach(el=>{el.addEventListener('click',()=>{openMeeting(el.dataset.meeting);pendingLog={type:'meeting'};render();});});
-  document.getElementById('pl-cancel')?.addEventListener('click',()=>{pendingLog=null;render();});
+  document.getElementById('pl-cancel')?.addEventListener('click',()=>{pendingLog=null;_pendingRecId=null;render();});
   document.getElementById('rec-start')?.addEventListener('click',startRecording);
   document.getElementById('rec-stop')?.addEventListener('click',stopRecording);
   document.querySelectorAll('[data-edit]').forEach(el=>{el.addEventListener('click',()=>{ui.modal='edit-cust';ui.eid=parseInt(el.dataset.edit);render();});});
@@ -857,9 +931,11 @@ function bind(){
     r.readAsText(f);
   });
   // Modal
-  document.getElementById('mov')?.addEventListener('click',e=>{if(e.target.id==='mov'){ui.modal=null;render();}});
-  document.getElementById('mcancel')?.addEventListener('click',()=>{ui.modal=null;render();});
+  document.getElementById('mov')?.addEventListener('click',e=>{if(e.target.id==='mov'){closeRecModal();render();}});
+  document.getElementById('mcancel')?.addEventListener('click',()=>{closeRecModal();render();});
   document.getElementById('msave')?.addEventListener('click',saveCust);
+  document.getElementById('rec-delete')?.addEventListener('click',deleteRecording);
+  document.querySelectorAll('[data-play-rec]').forEach(el=>{el.addEventListener('click',()=>playRecording(el.dataset.playRec));});
   // Appointment
   document.getElementById('apo-save')?.addEventListener('click',saveApo);
   document.getElementById('apo-del')?.addEventListener('click',deleteApo);
@@ -902,13 +978,14 @@ function saveContact(){
   const year=parseInt(document.getElementById('hy')?.value||new Date().getFullYear());
   const month=parseInt(document.getElementById('hm')?.value||new Date().getMonth()+1);
   const contactStatus=document.getElementById('h-cstat')?.value||'';
-  D.contacts.push({id:'h'+D._hid++,cid,si,pid,year,month,at,method,reason,manager,content});
+  D.contacts.push({id:'h'+D._hid++,cid,si,pid,year,month,at,method,reason,manager,content,recId:_pendingRecId||null});
   const c=D.customers.find(x=>x.id===cid);
   if(c){
     c.lastAt=at;
     if(contactStatus) c.status=contactStatus;
   }
   pendingLog=null;
+  _pendingRecId=null;
   svData();toast('保存しました','ok');render();
 }
 

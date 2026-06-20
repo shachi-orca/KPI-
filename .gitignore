@@ -6,3 +6,10 @@
 .vscode/
 read_state_test.html
 seed_test.html
+.tmp_seed_*.html
+.tmp_shot_*.png
+.tmp_validate_*.json
+.tmp_dom_*.html
+gen_test_data_202606.js
+kpi_backup_test_202606.json
+crm_backup_test_202606.json

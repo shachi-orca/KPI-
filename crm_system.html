@@ -115,6 +115,7 @@ function loadKpiShared(){
       STAFF_LIST=kpiState._staffList;
   }catch(e){}
 }
+function isStaffActive(si){return !((kpiState&&kpiState.staffInactive)||[]).includes(si);}
 function sumKpiCRM(si,k){
   if(!kpiState||!kpiState.kpiData)return null;
   const pd=kpiState.kpiData[pKey()]||{};
@@ -258,7 +259,7 @@ function monthPrediction(si='all'){
   let target=state.goalOverride||0;
   if(!state.goalOverride&&kpiState&&kpiState.goals){
     const gd=kpiState.goals[pKey()]||{};
-    if(si==='all'){STAFF_LIST.forEach((_,i)=>{target+=(gd[i]&&gd[i]['契約数'])||0;});}
+    if(si==='all'){STAFF_LIST.forEach((_,i)=>{if(isStaffActive(i))target+=(gd[i]&&gd[i]['契約数'])||0;});}
     else{target=(gd[si]&&gd[si]['契約数'])||0;}
   }
   const predictCount=wonCount+Math.round(pipeCount);
@@ -315,7 +316,7 @@ function loginPage(){
       <div style="margin-bottom:10px"><div class="form-label">スタッフ</div>
         <select class="select" id="login-user" style="width:100%">
           <option value="">選択してください</option>
-          ${STAFF_LIST.map((s,i)=>`<option value="${i}">${esc(s)}</option>`).join('')}
+          ${STAFF_LIST.map((s,i)=>isStaffActive(i)?`<option value="${i}">${esc(s)}</option>`:'').join('')}
           <option value="admin">── 管理者 ──</option>
         </select>
       </div>
@@ -493,7 +494,8 @@ function dealsPage(){
 /* ===== ADMIN PAGE ===== */
 function adminPage(){
   const ms=curMonthStr();
-  const rows=STAFF_LIST.map((s,i)=>{
+  const rows=STAFF_LIST.map((s,i)=>i).filter(isStaffActive).map(i=>{
+    const s=STAFF_LIST[i];
     const pred=monthPrediction(i);
     const openCnt=state.deals.filter(d=>d.staffSi===i&&d.status==='open').length;
     const wonAmt=state.deals.filter(d=>d.staffSi===i&&d.status==='won'&&(d.closedAt||'').startsWith(ms)).reduce((s,d)=>s+(d.amount||0),0);

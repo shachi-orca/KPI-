@@ -146,6 +146,10 @@ textarea.fc{resize:vertical;min-height:110px;line-height:1.7;}
 .bw{background:var(--bg-warning);color:var(--text-warning);}
 .bs{background:var(--bg-success);color:var(--text-success);}
 .bp{background:#FFF7ED;color:#C45200;border:1.5px solid #FB923C;}
+.br{background:#EFF6FF;color:#1D4ED8;}
+.bc{background:#F3E8FF;color:#7C3AED;}
+.bk{background:#ECFDF5;color:#047857;}
+.bx{background:#FFF1F2;color:#BE123C;}
 .tip{font-size:12px;color:var(--text-3);}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:#1a1a2e;color:#fff;padding:10px 22px;border-radius:20px;font-size:13px;z-index:9999;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;font-weight:600;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
@@ -171,7 +175,8 @@ const WARN_BYTES=4*1024*1024;
 const ROLES=['代表取締役','取締役','部長','課長','係長','担当者','一般','その他'];
 const METHODS=['アウトバウンド','インバウンド','メール対応','OLS','対面','その他'];
 const REASONS=['折返し連絡','クレーム対応','新規提案','その他'];
-const STATUSES=['未対応','優先対応','対応中','完了'];
+const STATUSES=['未対応','優先対応','対応中','依頼中','後確中','契約中','完了','解約中'];
+const STATUS_KPI_MAP={'依頼中':'依頼数','後確中':'後確数','契約中':'契約数','解約中':'解約数'}; // この対応ステータスを選んで保存するたびKPI管理の該当指標に+1
 const METHOD_ICONS={'アウトバウンド':'ti-phone-outgoing','インバウンド':'ti-phone-incoming','メール対応':'ti-mail','OLS':'ti-device-laptop','対面':'ti-users','その他':'ti-message'};
 const REASON_ICONS={'折返し連絡':'ti-phone-call','クレーム対応':'ti-alert-circle','新規提案':'ti-bulb','その他':'ti-message'};
 
@@ -197,6 +202,22 @@ function svData(){
   if(j.length>WARN_BYTES)toast(`ストレージ${(j.length/1024/1024).toFixed(1)}MB使用中。エクスポートを推奨します`,'warn');
 }
 function ldKpi(){try{return JSON.parse(localStorage.getItem(KPI_KEY)||'null');}catch{return null;}}
+// 対応ステータス（依頼中/後確中/契約中/解約中）保存時、KPI管理（kpi_system.html）の該当指標に+1する
+function incrementKpiCount(si,atMs,metric){
+  try{
+    const kpi=ldKpi();
+    if(!kpi)return;
+    const d=new Date(atMs);
+    const period=`${d.getFullYear()}_${d.getMonth()}`,day=d.getDate();
+    if(!kpi.kpiData)kpi.kpiData={};
+    if(!kpi.kpiData[period])kpi.kpiData[period]={};
+    if(!kpi.kpiData[period][si])kpi.kpiData[period][si]={};
+    if(!kpi.kpiData[period][si][day])kpi.kpiData[period][si][day]={};
+    const dayObj=kpi.kpiData[period][si][day];
+    dayObj[metric]=(dayObj[metric]||0)+1;
+    localStorage.setItem(KPI_KEY,JSON.stringify(kpi));
+  }catch{}
+}
 
 // ── Utils ──
 let _tt;
@@ -219,7 +240,7 @@ function toLocalDT(ts){const d=new Date(ts);return`${d.getFullYear()}-${p2(d.get
 function staffName(si){return ldKpi()?._staffList?.[si]||`スタッフ${si}`;}
 function prodName(pid){return D.products.find(p=>p.id===pid)?.name||pid;}
 function lastContact(cid){const h=[...D.contacts.filter(h=>h.cid===cid)].sort((a,b)=>b.at-a.at);return h[0]?.at?fmtD(h[0].at):'';}
-function statusBadge(s){const m={'未対応':'bd','優先対応':'bp','対応中':'bw','完了':'bs'};return`<span class="badge ${m[s]||'bd'}">${esc(s)}</span>`;}
+function statusBadge(s){const m={'未対応':'bd','優先対応':'bp','対応中':'bw','依頼中':'br','後確中':'bc','契約中':'bk','完了':'bs','解約中':'bx'};return`<span class="badge ${m[s]||'bd'}">${esc(s)}</span>`;}
 
 // ── 電話・メール・Web会議の発信アクション ──
 // 現状はOS既定のソフトフォン/メールソフトに委ねる実装。CTI/会議APIを契約したら、ここだけ差し替える。
@@ -330,8 +351,8 @@ function render(){
 
 // ── Login ──
 function loginHTML(){
-  const kpi=ldKpi(),sl=kpi?._staffList||[];
-  const opts=sl.map((n,i)=>`<option value="${i}">${esc(n)}</option>`).join('');
+  const kpi=ldKpi(),sl=kpi?._staffList||[],inactive=kpi?.staffInactive||[];
+  const opts=sl.map((n,i)=>inactive.includes(i)?'':`<option value="${i}">${esc(n)}</option>`).join('');
   return`<div class="login-wrap"><div class="login-card">
     <div class="login-logo"><i class="ti ti-address-book"></i> CRM 顧客管理</div>
     <div class="login-sub">顧客管理システム</div>
@@ -984,6 +1005,7 @@ function saveContact(){
     c.lastAt=at;
     if(contactStatus) c.status=contactStatus;
   }
+  if(STATUS_KPI_MAP[contactStatus])incrementKpiCount(si,at,STATUS_KPI_MAP[contactStatus]);
   pendingLog=null;
   _pendingRecId=null;
   svData();toast('保存しました','ok');render();

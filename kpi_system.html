@@ -117,6 +117,7 @@ select.form-control{cursor:pointer}
 .kpi-table td.today{background:#EEF5FF}
 .kpi-table td.total{background:var(--bg-secondary);font-weight:600}
 .kpi-table td.rate{color:#185FA5;font-weight:500}
+.kpi-table td.linked{color:#7C3AED;font-weight:500;background:#FAF5FF;cursor:help}
 .kpi-table input[type=number]{width:62px;padding:3px 5px;border:1px solid var(--border-md);border-radius:5px;text-align:right;font-size:12px;background:#fff;color:var(--text-primary);font-family:inherit}
 .kpi-table input[type=number]:focus{outline:none;border-color:#185FA5}
 /* Progress */
@@ -200,9 +201,27 @@ table.att-list td{padding:7px 10px;border:1px solid var(--border)}
 <div id="root"></div>
 <script>
 let STAFF_LIST=['田中 一郎','佐藤 花子','鈴木 太郎','高橋 美咲','伊藤 健司','渡辺 さくら','山本 浩二','中村 麗子','小林 大輔','加藤 由美']; // スタッフ管理で可変・永続化（_staffList として保存）
-const KPI_ACT=['コール数','アプローチ数','対コールコンタクト数','対アプローチコンタクト数','完了数','クロージング数','依頼数','後確数','契約数','解約数'];
-const KPI_RATE=['対コールコンタクト率','対アプローチコンタクト率','対コール完了率','対アプローチ完了率','クロージング率','依頼率','後確率','契約率','解約率'];
+const KPI_ACT=['コール数','アプローチ数','コンタクト数','対コールコンタクト数','対アプローチコンタクト数','完了数','クロージング数','依頼数','後確数','契約数','解約数'];
+const KPI_RATE=['対コールコンタクト率','対アプローチコンタクト率','対コール完了率','対アプローチ完了率','対コンタクト完了率','クロージング率','依頼率','後確率','契約率','解約率'];
 const KPI_CC=['着信数','応答数','通話時間(分)','20秒内応答数']; // コールセンター指標の入力値（応答率/放棄率/AHT/SLは自動計算）
+const CRM_LINKED_KPI=['依頼数','後確数','契約数','解約数']; // customer_crm.htmlの対応ステータス変更で自動加算される指標（手入力不可）
+const COMPUTED_KPI=['コンタクト数']; // 対コールコンタクト数＋対アプローチコンタクト数から自動計算される指標（手入力不可）
+// KPI閾値判定（入力値が基準未満の日は赤色表記）のデフォルト値。管理者画面で変更可能（state.kpiThresholdsに保存）
+const DEFAULT_KPI_THRESHOLDS={
+  callPerHour:30,      // コール数：稼働1時間あたりの最低件数
+  approachPerHour:1,   // アプローチ数：稼働1時間あたりの最低件数
+  callContactRate:30,  // 対コールコンタクト数：コール数に対する最低%
+  approachContactRate:50, // 対アプローチコンタクト数：アプローチ数に対する最低%
+  contactDoneRate:30,  // 完了数：コンタクト数に対する最低%
+  closingRate:18,      // クロージング数：完了数に対する最低%
+  reqHoursPer:4,       // 依頼数：何時間で1件必要か（稼働時間÷この値 件が最低ライン）
+  confirmRate:98,      // 後確数：依頼数に対する最低%
+  contractRate:98,     // 契約数：後確数に対する最低%
+  cancelMaxPerDay:2    // 解約数：1日あたりこの件数以上で赤
+};
+function kpiThresholds(){return Object.assign({},DEFAULT_KPI_THRESHOLDS,state.kpiThresholds||{});}
+// KPI項目名からDOM要素id用の安全な文字列を生成（日本語の項目名は文字数で衝突しうるためindexベースにする）
+function kpiDomId(k){const i=KPI_ACT.indexOf(k);return i>=0?'k'+i:k.replace(/[^\w]/g,'_');}
 // シフト種別（クリックで循環）。''=未設定
 const SHIFT_TYPES=[
   {c:'早',label:'早番 9-18',   bg:'#eaf3de',tx:'#3B6D11', start:'09:00',end:'18:00'},
@@ -299,6 +318,8 @@ let state={
   correctionLog:[{date:'06/09',staff:'田中 一郎',content:'出勤時刻 → 08:50',reason:'端末故障'}],
   histStaff:0,histTab:'daily',
   summaryStaff:0, // 業績サマリーページ専用スタッフ選択（'total'|数値）
+  staffInactive:[], // 無効化（退職等）したスタッフのindex一覧。データは保持しログイン・現在チーム表示からのみ除外
+  kpiThresholds:{}, // KPI入力の赤色判定基準値（未設定キーはDEFAULT_KPI_THRESHOLDSを使用）
   sharedMemo:{text:'',by:null,byName:'',at:null} // 全員共有メモ帳
 };
 
@@ -538,14 +559,20 @@ function ensureGoalFloor(){
   STAFF_LIST.forEach((_,si)=>{
     if(!gData()[si])gData()[si]={};
     KPI_ACT.forEach(k=>{
-      if(k==='解約数')return;
+      if(k==='解約数'||k==='コンタクト数')return; // コンタクト数の目標は対コール/対アプローチの合算で別途同期
       const actual=sumKpi(si,k);
       if((gData()[si][k]||0)<actual){
         // 実績＋3〜18%の余裕を持たせて引き上げ（達成率 約85〜97%に着地）
         gData()[si][k]=Math.ceil(actual*(1+rnd(3,18)/100));
       }
     });
+    syncContactGoal(si);
   });
+}
+// コンタクト数の目標は常に「対コールコンタクト数の目標＋対アプローチコンタクト数の目標」に同期する
+function syncContactGoal(si){
+  if(!gData()[si])return;
+  gData()[si]['コンタクト数']=(gData()[si]['対コールコンタクト数']||0)+(gData()[si]['対アプローチコンタクト数']||0);
 }
 
 /* ===== スタッフ管理（追加・削除） ===== */
@@ -605,12 +632,19 @@ function removeStaff(r){
   state.reportStaff=remap(state.reportStaff)===null?0:remap(state.reportStaff);
   state.proxyStaff=remap(state.proxyStaff)===null?0:remap(state.proxyStaff);
   if(state.summaryStaff!==undefined)state.summaryStaff=reSel(state.summaryStaff);
+  state.staffInactive=(state.staffInactive||[]).map(remap).filter(v=>v!==null);
+}
+// 無効化（退職等）：データは保持したままログイン・現在チーム表示からのみ除外。いつでも有効化に戻せる
+function isStaffActive(si){return !(state.staffInactive||[]).includes(si);}
+function toggleStaffActive(si){
+  state.staffInactive=state.staffInactive||[];
+  if(state.staffInactive.includes(si))state.staffInactive=state.staffInactive.filter(i=>i!==si);
+  else state.staffInactive.push(si);
 }
 
 // 1日分のサンプル（ファネル＋CC）を生成。各値はundefinedのときのみ補完（冪等）
 function genDayData(v){
-  if(state._noSample)return; // 稼働開始リセット後はサンプル生成しない
-  if(v['コール数']===undefined){
+  if(!state._noSample&&v['コール数']===undefined){
     const call=rnd(20,60),app=rnd(10,40);
     const cCont=rndBelow(call,80),aCont=rndBelow(app,80);
     // 下流（完了数〜契約数）は上流が1以上ある限り0に落ちないよう下限を保証（ファネル下流の0偏り対策）
@@ -620,13 +654,17 @@ function genDayData(v){
     v['コール数']=call;v['アプローチ数']=app;v['対コールコンタクト数']=cCont;v['対アプローチコンタクト数']=aCont;
     v['完了数']=done;v['クロージング数']=closing;v['依頼数']=req;v['後確数']=confirm;v['契約数']=contract;v['解約数']=cancel;
   }
-  if(v['着信数']===undefined){
+  if(!state._noSample&&v['着信数']===undefined){
     v['着信数']=rnd(30,80);
     v['応答数']=Math.round(v['着信数']*rnd(80,98)/100); // 応答率80〜98%
     v['通話時間(分)']=v['応答数']*rnd(3,8);
   }
   // 20秒内応答数（サービスレベルSL算出用）。着信のある日は既存データにも遡って補完
-  if(v['20秒内応答数']===undefined&&v['応答数']!==undefined)v['20秒内応答数']=Math.round(v['応答数']*rnd(70,95)/100);
+  if(!state._noSample&&v['20秒内応答数']===undefined&&v['応答数']!==undefined)v['20秒内応答数']=Math.round(v['応答数']*rnd(70,95)/100);
+  // コンタクト数は対コールコンタクト数＋対アプローチコンタクト数から常に自動算出（手入力ではなく構造的な再計算のため_noSampleでも対象）
+  if(v['対コールコンタクト数']!==undefined||v['対アプローチコンタクト数']!==undefined){
+    v['コンタクト数']=(v['対コールコンタクト数']||0)+(v['対アプローチコンタクト数']||0);
+  }
 }
 // 指定期間(年,月0-index)のKPIサンプルを用意（前月比トレンド参照用・未来月は除外）
 function ensurePeriodData(yy,mm){
@@ -637,9 +675,10 @@ function ensurePeriodData(yy,mm){
 }
 // 目標のサンプル初期値（ファネル構造：コール数→契約数の順に小さくなる）
 function goalBaseSample(){
+  const cCont=rnd(300,600),aCont=rnd(200,400);
   return{
     'コール数':rnd(800,1200),'アプローチ数':rnd(400,700),
-    '対コールコンタクト数':rnd(300,600),'対アプローチコンタクト数':rnd(200,400),
+    'コンタクト数':cCont+aCont,'対コールコンタクト数':cCont,'対アプローチコンタクト数':aCont,
     '完了数':rnd(150,300),'クロージング数':rnd(80,180),
     '依頼数':rnd(50,120),'後確数':rnd(30,90),
     '契約数':rnd(15,50),'解約数':rnd(0,10)
@@ -661,6 +700,8 @@ function periodSumAll(yy,mm,kpi){let t=0;STAFF_LIST.forEach((_,si)=>t+=periodSum
 // 指定期間の目標値
 function periodGoal(yy,mm,si,kpi){const g=state.goals[yy+'_'+mm];return(g&&g[si]&&g[si][kpi])||0;}
 function periodGoalAll(yy,mm,kpi){let t=0;STAFF_LIST.forEach((_,si)=>t+=periodGoal(yy,mm,si,kpi));return t;}
+// 閲覧中月の目標を有効スタッフのみで合計（無効化スタッフの目標は現在のチーム目標から除外）
+function goalSumActive(k){let t=0;STAFF_LIST.forEach((_,i)=>{if(isStaffActive(i))t+=(gData()[i][k]||0);});return t;}
 // 閲覧中月から遡ったnヶ月分の[年,月0-index]配列（古い→新しい順）
 function trendMonths(n){
   const arr=[];let y=state.viewYear,m=state.viewMonth;
@@ -733,6 +774,8 @@ function calcRate(si,d){
     '対コール完了率'             : pct(v['完了数'],                  v['コール数']),
     // 対アプローチ完了率 = アプローチから完了した割合
     '対アプローチ完了率'         : pct(v['完了数'],                  v['アプローチ数']),
+    // 対コンタクト完了率 = コンタクトした案件が完了（失注・成約問わず）に至った割合
+    '対コンタクト完了率'         : pct(v['完了数'],                  v['コンタクト数']),
     // クロージング率 = 完了からクロージングに進んだ割合
     'クロージング率'             : pct(v['クロージング数'],           v['完了数']),
     // 依頼率 = クロージングから依頼を受けた割合
@@ -751,6 +794,7 @@ function calcSlotRate(v){
     '対アプローチコンタクト率':pct(v['対アプローチコンタクト数'],v['アプローチ数']),
     '対コール完了率'          :pct(v['完了数'],                  v['コール数']),
     '対アプローチ完了率'      :pct(v['完了数'],                  v['アプローチ数']),
+    '対コンタクト完了率'      :pct(v['完了数'],                  v['コンタクト数']),
     'クロージング率'          :pct(v['クロージング数'],           v['完了数']),
     '依頼率'                  :pct(v['依頼数'],                  v['クロージング数']),
     '後確率'                  :pct(v['後確数'],                  v['依頼数']),
@@ -759,8 +803,31 @@ function calcSlotRate(v){
   };
 }
 
+// 日次KPI入力値が基準未満かどうかを判定（true=赤色表記。基準が評価不能な場合はnull=通常の黒色表記）
+// 基準値はstate.kpiThresholds（管理者画面で変更可）。稼働時間が必要な項目は、その日の打刻が無い場合は判定しない
+function isKpiBelowThreshold(si,day,k){
+  const v=(kData()[si]&&kData()[si][day])||{};
+  const val=v[k]||0;
+  const th=kpiThresholds();
+  const hrs=workedHoursFor(si,day);
+  switch(k){
+    case 'コール数': return hrs>0?(val/hrs)<th.callPerHour:null;
+    case 'アプローチ数': return hrs>0?(val/hrs)<th.approachPerHour:null;
+    case '対コールコンタクト数': {const call=v['コール数']||0;return call>0?(val/call*100)<th.callContactRate:null;}
+    case '対アプローチコンタクト数': {const app=v['アプローチ数']||0;return app>0?(val/app*100)<th.approachContactRate:null;}
+    case '完了数': {const cont=v['コンタクト数']||0;return cont>0?(val/cont*100)<th.contactDoneRate:null;}
+    case 'クロージング数': {const done=v['完了数']||0;return done>0?(val/done*100)<th.closingRate:null;}
+    case '依頼数': return hrs>0?(val/hrs)<(1/th.reqHoursPer):null;
+    case '後確数': {const req=v['依頼数']||0;return req>0?(val/req*100)<th.confirmRate:null;}
+    case '契約数': {const cfm=v['後確数']||0;return cfm>0?(val/cfm*100)<th.contractRate:null;}
+    case '解約数': return val>=th.cancelMaxPerDay;
+    default: return null;
+  }
+}
 function sumKpi(si,kpi){let t=0;for(let d=1;d<=DAYS;d++)t+=kData()[si][d][kpi]||0;return t;}
 function sumKpiAll(kpi){let t=0;STAFF_LIST.forEach((_,i)=>t+=sumKpi(i,kpi));return t;}
+// 「現在の有効スタッフのみ」の合計（Total系の現在チーム表示で、無効化スタッフを除いた行リストと整合させるために使用）
+function sumKpiAllActive(kpi){let t=0;STAFF_LIST.forEach((_,i)=>{if(isStaffActive(i))t+=sumKpi(i,kpi);});return t;}
 
 /* ===== コールセンター指標 ===== */
 // CC日次計算（応答率・放棄率・AHT分）
@@ -799,6 +866,7 @@ function computeAlerts(){
   const alerts=[];
   const elapsed=DAYS?Math.round(LAST_D/DAYS*100):0; // 当月の経過割合%
   STAFF_LIST.forEach((s,si)=>{
+    if(!isStaffActive(si))return; // 無効化したスタッフはアラート対象外
     const g=gData()[si]['コール数']||1;const ach=Math.round(sumKpi(si,'コール数')/g*100);
     if(IS_CURRENT&&elapsed>=20&&ach<elapsed*0.7)alerts.push({lv:'danger',s,msg:`コール数が大幅未達（達成${ach}% / 月経過${elapsed}%）`});
     const ab=absenceDays(si);
@@ -901,6 +969,16 @@ function calcWorkMin(inT,outT,brkS,brkE){
   let work=outM-inM;
   if(brkS&&brkE){let bs=toMin(brkS),be=toMin(brkE);if(be<bs)be+=1440;work-=(be-bs);}
   return Math.max(0,work);
+}
+// 指定スタッフ・指定日（閲覧中の年月基準）の実働時間（時間単位）。打刻が無い日は0
+function workedHoursFor(si,day){
+  const key=`${si}_${Y}_${M+1}_${day}`;
+  const log=state.attLog.filter(l=>l.si===si&&l.dateKey===key);
+  const inT=(log.find(l=>l.type==='in')||{}).time;
+  const outT=(log.find(l=>l.type==='out')||{}).time;
+  const brkS=(log.find(l=>l.type==='brk')||{}).time;
+  const brkE=(log.find(l=>l.type==='ret2')||{}).time;
+  return calcWorkMin(inT,outT,brkS,brkE)/60;
 }
 // 深夜帯（22:00〜翌05:00）に労働した分数。日跨ぎ夜勤・早朝勤務の両方を拾う
 function nightMinutesOf(inT,outT){
@@ -1012,7 +1090,7 @@ function loginHTML(){
     <div class="form-group"><label class="form-label">担当者を選択</label>
       <select class="form-control" id="l-staff">
         <option value="">— 選択してください —</option>
-        ${STAFF_LIST.map((s,i)=>{const hasN=((state.otNotify||{})[i]||[]).length||((state.leaveNotify||{})[i]||[]).length||((state.shiftNotify||{})[i]||[]).length;return `<option value="${i}">${hasN?'🔔 ':''}${esc(s)}</option>`;}).join('')}
+        ${STAFF_LIST.map((s,i)=>{if(!isStaffActive(i))return '';const hasN=((state.otNotify||{})[i]||[]).length||((state.leaveNotify||{})[i]||[]).length||((state.shiftNotify||{})[i]||[]).length;return `<option value="${i}">${hasN?'🔔 ':''}${esc(s)}</option>`;}).join('')}
         <option value="admin">【管理者】</option>
       </select></div>
     <div class="form-group"><label class="form-label">パスワード</label>
@@ -1241,7 +1319,8 @@ function startClock(){
 function adminAttendanceOverview(){
   const labels={off:'未出勤',working:'稼働中',break:'休憩中'};
   const today=`${REAL_Y}-${pad2(REAL_M+1)}-${pad2(REAL_D)}`;
-  const rows=STAFF_LIST.map((s,i)=>{
+  const rows=STAFF_LIST.map((s,i)=>i).filter(isStaffActive).map(i=>{
+    const s=STAFF_LIST[i];
     const st=state.attStatus[i]||'off';
     const key=`${i}_${REAL_Y}_${REAL_M+1}_${REAL_D}`;
     const log=state.attLog.filter(l=>l.si===i&&l.dateKey===key);
@@ -1915,13 +1994,15 @@ function kpiPage(){
     </div>`:''}
     <button class="btn btn-sm" id="kpi-csv" style="margin-left:auto"><i class="ti ti-file-download"></i> CSV出力</button>
     <span class="tip">${isTotal?'<i class="ti ti-users" style="color:#185FA5"></i> 全員合計':'<i class="ti ti-check" style="color:#1D9E75"></i> 自動保存済み'}</span>
-  </div>`;
+  </div>
+  ${state.kpiTab==='act'?`<div class="tip" style="margin:-6px 0 12px;color:#7C3AED"><i class="ti ti-link"></i> 依頼数・後確数・契約数・解約数はCRM（顧客管理）の対応履歴ステータスから自動集計されます（手入力不可）</div>`:''}`;
 
   const RATE_MAP={
     '対コールコンタクト率':['対コールコンタクト数','コール数'],
     '対アプローチコンタクト率':['対アプローチコンタクト数','アプローチ数'],
     '対コール完了率':['完了数','コール数'],
     '対アプローチ完了率':['完了数','アプローチ数'],
+    '対コンタクト完了率':['完了数','コンタクト数'],
     'クロージング率':['クロージング数','完了数'],
     '依頼率':['依頼数','クロージング数'],
     '後確率':['後確数','依頼数'],
@@ -1934,14 +2015,14 @@ function kpiPage(){
     return header+`
     <div class="grid-4" style="margin-bottom:16px">
       ${summaryKpis.map(k=>{
-        const tot=sumKpiAll(k);
-        const goalTotal=STAFF_LIST.reduce((_,__,i)=>_+(gData()[i][k]||0),0)||1;
-        const pct=Math.min(100,Math.round(tot/goalTotal*100));
+        const tot=sumKpiAllActive(k);
+        const goalTotal=goalSumActive(k)||1;
+        const pct=Math.round(tot/goalTotal*100);
         const col=pct>=100?'#1D9E75':pct>=70?'#BA7517':'#D85A30';
         return `<div class="metric-card">
           <div class="metric-label">${k}（全員）</div>
           <div class="metric-value" style="font-size:20px;color:${col}">${tot}</div>
-          <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${col}"></div></div>
+          <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100,pct)}%;background:${col}"></div></div>
           <div class="metric-sub">${pct}%達成 / 目標${goalTotal}</div>
         </div>`;}).join('')}
     </div>
@@ -2024,12 +2105,12 @@ function kpiPage(){
   return header+`
   <div class="grid-4" style="margin-bottom:16px">
     ${['コール数','アプローチ数','契約数','クロージング数'].map(k=>{
-      const tot=sumKpi(si,k);const goal=gData()[si][k]||1;const pct=Math.min(100,Math.round(tot/goal*100));
+      const tot=sumKpi(si,k);const goal=gData()[si][k]||1;const pct=Math.round(tot/goal*100);
       const col=pct>=100?'#1D9E75':pct>=70?'#BA7517':'#D85A30';
       return `<div class="metric-card">
         <div class="metric-label">${k}</div>
         <div class="metric-value" style="font-size:20px;color:${col}">${tot}</div>
-        <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${col}"></div></div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100,pct)}%;background:${col}"></div></div>
         <div class="metric-sub">${pct}%達成 / 目標${goal}</div>
       </div>`;}).join('')}
   </div>
@@ -2046,7 +2127,11 @@ function kpiPage(){
           ${Array.from({length:DAYS},(_,d)=>{
             const day=d+1;
             if(isRate){const r=calcRate(si,day);return `<td class="${day===TODAY_D?'today ':''} rate">${r[k]}</td>`;}
-            return `<td class="${day===TODAY_D?'today':''}"><input type="number" min="0" value="${kData()[si][day][k]||0}" data-si="${si}" data-day="${day}" data-kpi="${k}"></td>`;
+            const below=isKpiBelowThreshold(si,day,k);
+            const warnCol=below?'#D85A30':'';
+            if(COMPUTED_KPI.includes(k)){return `<td class="${day===TODAY_D?'today ':''} linked" style="${warnCol?'color:'+warnCol:''}" title="対コールコンタクト数＋対アプローチコンタクト数の自動合算（手入力不可）">${kData()[si][day][k]||0}</td>`;}
+            if(CRM_LINKED_KPI.includes(k)){return `<td class="${day===TODAY_D?'today ':''} linked" style="${warnCol?'color:'+warnCol:''}" title="CRMの対応履歴から自動集計（手入力不可）">${kData()[si][day][k]||0}</td>`;}
+            return `<td class="${day===TODAY_D?'today':''}"><input type="number" min="0" value="${kData()[si][day][k]||0}" data-si="${si}" data-day="${day}" data-kpi="${k}" style="${warnCol?'color:'+warnCol+';font-weight:700':''}"></td>`;
           }).join('')}
           <td class="total ${isRate?'rate':''}">${isRate?'—':sumKpi(si,k)}</td>
         </tr>`;
@@ -2069,8 +2154,11 @@ function bindKpi(){
     inp.oninput=e=>{
       const si=parseInt(e.target.dataset.si),day=parseInt(e.target.dataset.day),kpi=e.target.dataset.kpi;
       kData()[si][day][kpi]=parseInt(e.target.value)||0;
+      if(kpi==='対コールコンタクト数'||kpi==='対アプローチコンタクト数')genDayData(kData()[si][day]); // コンタクト数を再同期
       saveStateDebounced();
     };
+    // 入力確定（フォーカスアウト）時に赤色判定・コンタクト数表示を再描画
+    inp.onchange=()=>render();
   });
   scrollKpiToToday();
 }
@@ -2381,10 +2469,11 @@ function ccPage(){
     </div>`;
   }
   if(isTotal){
-    const ti=STAFF_LIST.reduce((a,_,i)=>a+ccMonthly(i).inb,0),ta=STAFF_LIST.reduce((a,_,i)=>a+ccMonthly(i).ans,0),tt=sumKpiAll('通話時間(分)'),ts=sumKpiAll('20秒内応答数');
+    const activeIdx=STAFF_LIST.map((s,i)=>i).filter(isStaffActive);
+    const ti=activeIdx.reduce((a,i)=>a+ccMonthly(i).inb,0),ta=activeIdx.reduce((a,i)=>a+ccMonthly(i).ans,0),tt=sumKpiAllActive('通話時間(分)'),ts=sumKpiAllActive('20秒内応答数');
     return toolbar+`<div class="kpi-table-wrap"><table class="kpi-table">
       <thead><tr><th class="row-header">担当者</th><th>着信数</th><th>応答数</th><th>放棄数</th><th>応答率</th><th>放棄率</th><th>SL</th><th>AHT(分)</th></tr></thead>
-      <tbody>${STAFF_LIST.map((s,i)=>{const m=ccMonthly(i);return `<tr>
+      <tbody>${activeIdx.map(i=>{const s=STAFF_LIST[i];const m=ccMonthly(i);return `<tr>
         <td class="row-header">${esc(s)}</td><td>${m.inb}</td><td>${m.ans}</td><td>${m.abn}</td>
         <td class="rate">${m.ansRate.toFixed(1)}%</td>
         <td style="color:${m.abnRate>15?'#A32D2D':'#185FA5'};font-weight:500">${m.abnRate.toFixed(1)}%</td>
@@ -2437,7 +2526,7 @@ function buildReportText(scope,fmt){
   const vTeam=k=>isDay?STAFF_LIST.reduce((a,_,i)=>a+((kData()[i][day]&&kData()[i][day][k])||0),0):sumKpiAll(k);
   // 目標：日次=日割り(月目標/日数) / 月次=月目標
   const gInd=(si,k)=>{const g=gData()[si][k]||0;return isDay?Math.max(1,Math.round(g/DAYS)):(g||1);};
-  const gTeam=k=>{const g=STAFF_LIST.reduce((_,__,i)=>_+(gData()[i][k]||0),0);return isDay?Math.max(1,Math.round(g/DAYS)):(g||1);};
+  const gTeam=k=>{const g=goalSumActive(k);return isDay?Math.max(1,Math.round(g/DAYS)):(g||1);};
   const contractOf=i=>isDay?((kData()[i][day]&&kData()[i][day]['契約数'])||0):sumKpi(i,'契約数');
   if(scope==='individual'){
     const head=`${isDay?'日次':'月次'}KPI報告`;
@@ -2520,8 +2609,8 @@ function dashboardPage(){
 
   // ===== Total表示（管理者のみ） =====
   if(isTotal){
-    const totVal=sumKpiAll(kpi);
-    const goalTotal=STAFF_LIST.reduce((_,__,i)=>_+(gData()[i][kpi]||0),0)||1;
+    const totVal=sumKpiAllActive(kpi);
+    const goalTotal=goalSumActive(kpi)||1;
     const pct=Math.round(totVal/goalTotal*100);
     const col=pct>=100?'#1D9E75':pct>=70?'#BA7517':'#D85A30';
     return `
@@ -2543,12 +2632,13 @@ function dashboardPage(){
     </div>
     <div class="card">
       <div class="section-title">スタッフ別 ${kpi} 達成状況</div>
-      ${STAFF_LIST.map((s,i)=>{
-        const t=sumKpi(i,kpi);const g=gData()[i][kpi]||1;const p=Math.min(100,Math.round(t/g*100));
+      ${STAFF_LIST.map((s,i)=>i).filter(isStaffActive).map(i=>{
+        const s=STAFF_LIST[i];
+        const t=sumKpi(i,kpi);const g=gData()[i][kpi]||1;const p=Math.round(t/g*100);
         const c=p>=100?'#1D9E75':p>=70?'#BA7517':'#D85A30';
         return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
           <div style="width:80px;font-size:12px;flex-shrink:0">${s}</div>
-          <div style="flex:1"><div class="progress-bar" style="height:6px"><div class="progress-fill" style="width:${p}%;background:${c}"></div></div></div>
+          <div style="flex:1"><div class="progress-bar" style="height:6px"><div class="progress-fill" style="width:${Math.min(100,p)}%;background:${c}"></div></div></div>
           <div style="font-size:12px;color:${c};width:44px;text-align:right;font-weight:600">${p}%</div>
           <div class="tip" style="width:60px;text-align:right">${t}/${g}</div>
         </div>`;
@@ -2563,11 +2653,11 @@ function dashboardPage(){
     <div class="card">
       <div class="section-title">全KPI チーム達成状況</div>
       ${KPI_ACT.map(k=>{
-        const t=sumKpiAll(k);const g=STAFF_LIST.reduce((_,__,i)=>_+(gData()[i][k]||0),0)||1;
-        const p=Math.min(100,Math.round(t/g*100));const c=p>=100?'#1D9E75':p>=70?'#BA7517':'#D85A30';
+        const t=sumKpiAllActive(k);const g=goalSumActive(k)||1;
+        const p=Math.round(t/g*100);const c=p>=100?'#1D9E75':p>=70?'#BA7517':'#D85A30';
         return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
           <div style="width:130px;font-size:12px;flex-shrink:0">${k}</div>
-          <div style="flex:1"><div class="progress-bar" style="height:6px"><div class="progress-fill" style="width:${p}%;background:${c}"></div></div></div>
+          <div style="flex:1"><div class="progress-bar" style="height:6px"><div class="progress-fill" style="width:${Math.min(100,p)}%;background:${c}"></div></div></div>
           <div style="font-size:12px;color:${c};width:44px;text-align:right;font-weight:600">${p}%</div>
           <div class="tip" style="width:60px;text-align:right">${t}/${g}</div>
         </div>`;}).join('')}
@@ -2637,14 +2727,14 @@ function dashboardPage(){
     </div>
     <div id="dash-kpi-bars">
       ${KPI_ACT.map(k=>{
-        const t=sumKpi(si,k);const g=gData()[si][k]||1;const p=Math.min(100,Math.round(t/g*100));const c=p>=100?'#1D9E75':p>=70?'#BA7517':'#D85A30';
+        const t=sumKpi(si,k);const g=gData()[si][k]||1;const p=Math.round(t/g*100);const c=p>=100?'#1D9E75':p>=70?'#BA7517':'#D85A30';
         const proj=LAST_D>0?Math.round(t/LAST_D*DAYS):'-';
         const projC=LAST_D>0&&g?(proj>=g?'#1D9E75':proj>=g*0.8?'#BA7517':'#D85A30'):'var(--text-secondary)';
-        return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)" id="dash-bar-${k.replace(/[^\w]/g,'_')}">
+        return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)" id="dash-bar-${kpiDomId(k)}">
           <div style="width:130px;font-size:12px;flex-shrink:0">${k}</div>
-          <div style="flex:1"><div class="progress-bar" style="height:6px"><div class="progress-fill" id="dash-prog-${k.replace(/[^\w]/g,'_')}" style="width:${p}%;background:${c}"></div></div></div>
-          <div style="font-size:12px;color:${c};width:44px;text-align:right;font-weight:600" id="dash-pct-${k.replace(/[^\w]/g,'_')}">${p}%</div>
-          <div class="tip" style="width:60px;text-align:right" id="dash-val-${k.replace(/[^\w]/g,'_')}">${t}/${g}</div>
+          <div style="flex:1"><div class="progress-bar" style="height:6px"><div class="progress-fill" id="dash-prog-${kpiDomId(k)}" style="width:${Math.min(100,p)}%;background:${c}"></div></div></div>
+          <div style="font-size:12px;color:${c};width:44px;text-align:right;font-weight:600" id="dash-pct-${kpiDomId(k)}">${p}%</div>
+          <div class="tip" style="width:60px;text-align:right" id="dash-val-${kpiDomId(k)}">${t}/${g}</div>
           <div style="font-size:12px;color:${projC};width:56px;text-align:right;font-weight:600">→${proj}</div>
         </div>`;}).join('')}
     </div>
@@ -2668,17 +2758,21 @@ function dashboardPage(){
           const todayVal=kData()[si][TODAY_D][k]||0;
           const monthTot=sumKpi(si,k);
           const g=gData()[si][k]||1;
-          const p=Math.min(100,Math.round(monthTot/g*100));
+          const p=Math.round(monthTot/g*100);
           const c=p>=100?'#1D9E75':p>=70?'#BA7517':'#D85A30';
+          const linked=CRM_LINKED_KPI.includes(k),computed=COMPUTED_KPI.includes(k);
+          const readOnly=linked||computed;
+          const below=isKpiBelowThreshold(si,TODAY_D,k);
+          const warnCol=below?'#D85A30':'';
           return `<tr>
             <td class="row-header">${k}</td>
-            <td style="background:#EEF5FF">
-              <input type="number" min="0" value="${todayVal}"
-                style="width:70px;padding:4px 6px;border:1px solid var(--border-md);border-radius:5px;font-size:13px;text-align:right;font-family:inherit"
-                data-rt-si="${si}" data-rt-kpi="${k}">
+            <td style="${readOnly?'color:'+(warnCol||'#7C3AED')+';font-weight:600':'background:#EEF5FF'}" ${readOnly?`title="${linked?'CRMの対応履歴から自動集計':'対コールコンタクト数＋対アプローチコンタクト数の自動合算'}（手入力不可）"`:''} id="${readOnly?'rt-val-'+kpiDomId(k):''}">
+              ${readOnly?todayVal:`<input type="number" min="0" value="${todayVal}"
+                style="width:70px;padding:4px 6px;border:1px solid var(--border-md);border-radius:5px;font-size:13px;text-align:right;font-family:inherit;${warnCol?'color:'+warnCol+';font-weight:700':''}"
+                data-rt-si="${si}" data-rt-kpi="${k}">`}
             </td>
-            <td style="text-align:right;font-weight:600;font-family:var(--font-mono)" id="rt-month-${k.replace(/[^\w]/g,'_')}">${monthTot}</td>
-            <td style="text-align:right;font-weight:600;color:${c}" id="rt-pct-${k.replace(/[^\w]/g,'_')}">${p}%</td>
+            <td style="text-align:right;font-weight:600;font-family:var(--font-mono)" id="rt-month-${kpiDomId(k)}">${monthTot}</td>
+            <td style="text-align:right;font-weight:600;color:${c}" id="rt-pct-${kpiDomId(k)}">${p}%</td>
           </tr>`;
         }).join('')}
       </tbody>
@@ -2807,6 +2901,8 @@ function bindDashboard(){
 
       // stateを更新
       kData()[si][TODAY_D][kpi]=val;
+      // 対コール/対アプローチコンタクト数を編集した場合、コンタクト数を再同期
+      if(kpi==='対コールコンタクト数'||kpi==='対アプローチコンタクト数')genDayData(kData()[si][TODAY_D]);
 
       // --- サマリーカード更新 ---
       const selKpi=state.dashKpi;
@@ -2819,24 +2915,35 @@ function bindDashboard(){
       if(totEl)totEl.textContent=newTot;
       if(pctEl){pctEl.textContent=newPct+'%';pctEl.style.color=newCol;}
 
-      // --- 変更KPIの進捗バー更新 ---
-      const id=kpi.replace(/[^\w]/g,'_');
-      const newT=sumKpi(si,kpi);
-      const newG=gData()[si][kpi]||1;
-      const newP=Math.min(100,Math.round(newT/newG*100));
-      const newC=newP>=100?'#1D9E75':newP>=70?'#BA7517':'#D85A30';
-      const prog=document.getElementById(`dash-prog-${id}`);
-      const pctBar=document.getElementById(`dash-pct-${id}`);
-      const valBar=document.getElementById(`dash-val-${id}`);
-      if(prog){prog.style.width=newP+'%';prog.style.background=newC;}
-      if(pctBar){pctBar.textContent=newP+'%';pctBar.style.color=newC;}
-      if(valBar)valBar.textContent=`${newT}/${newG}`;
-
-      // --- 当日テーブルの月累計・達成率セル更新 ---
-      const mEl=document.getElementById(`rt-month-${id}`);
-      const rEl=document.getElementById(`rt-pct-${id}`);
-      if(mEl)mEl.textContent=newT;
-      if(rEl){rEl.textContent=newP+'%';rEl.style.color=newC;}
+      // --- 変更KPI（＋連動するコンタクト数）の進捗バー・当日セル・赤色判定を更新 ---
+      const refreshRow=k=>{
+        const id=kpiDomId(k);
+        const t=sumKpi(si,k),g=gData()[si][k]||1;
+        const p=Math.round(t/g*100);const c=p>=100?'#1D9E75':p>=70?'#BA7517':'#D85A30';
+        const prog=document.getElementById(`dash-prog-${id}`);
+        const pctBar=document.getElementById(`dash-pct-${id}`);
+        const valBar=document.getElementById(`dash-val-${id}`);
+        if(prog){prog.style.width=Math.min(100,p)+'%';prog.style.background=c;}
+        if(pctBar){pctBar.textContent=p+'%';pctBar.style.color=c;}
+        if(valBar)valBar.textContent=`${t}/${g}`;
+        const mEl=document.getElementById(`rt-month-${id}`);
+        const rEl=document.getElementById(`rt-pct-${id}`);
+        if(mEl)mEl.textContent=t;
+        if(rEl){rEl.textContent=p+'%';rEl.style.color=c;}
+        const warnCol=isKpiBelowThreshold(si,TODAY_D,k)?'#D85A30':'';
+        const valEl=document.getElementById(`rt-val-${id}`);
+        if(valEl){valEl.textContent=kData()[si][TODAY_D][k]||0;valEl.style.color=warnCol||'#7C3AED';}
+        if(k===kpi){e.target.style.color=warnCol;e.target.style.fontWeight=warnCol?'700':'';}
+      };
+      refreshRow(kpi);
+      if(kpi==='対コールコンタクト数'||kpi==='対アプローチコンタクト数')refreshRow('コンタクト数');
+      // 完了数はコンタクト数依存、クロージング数は完了数依存のため赤色判定のみ再評価
+      ['完了数','クロージング数'].forEach(k=>{
+        if(k===kpi)return;
+        const below=isKpiBelowThreshold(si,TODAY_D,k);
+        const el=document.querySelector(`[data-rt-si="${si}"][data-rt-kpi="${k}"]`);
+        if(el){el.style.color=below?'#D85A30':'';el.style.fontWeight=below?'700':'';}
+      });
 
       // --- グラフのその日のデータ点だけ差し替えて再描画 ---
       if(state.dashChart){
@@ -2882,7 +2989,7 @@ function alertsPanelHTML(){
 }
 function teamPage(){
   const kpi=state.teamKpi;
-  const staffVals=STAFF_LIST.map((s,i)=>({name:s,val:sumKpi(i,kpi),goal:gData()[i][kpi]||1}));
+  const staffVals=STAFF_LIST.map((s,i)=>({name:s,val:sumKpi(i,kpi),goal:gData()[i][kpi]||1,i})).filter(s=>isStaffActive(s.i));
   const maxVal=Math.max(...staffVals.map(s=>s.val),1);
   const projKpis=['コール数','アプローチ数','契約数','クロージング数'];
   return `
@@ -2894,15 +3001,15 @@ function teamPage(){
         <th class="row-header">担当者</th>
         ${projKpis.map(k=>`<th style="white-space:nowrap;text-align:center">${k}</th>`).join('')}
       </tr></thead>
-      <tbody>${STAFF_LIST.map((s,i)=>`<tr>
-        <td class="row-header">${s}</td>
+      <tbody>${STAFF_LIST.map((s,i)=>i).filter(isStaffActive).map(i=>`<tr>
+        <td class="row-header">${STAFF_LIST[i]}</td>
         ${projKpis.map(k=>{
           const t=sumKpi(i,k);const g=gData()[i][k]||0;
-          const p=g?Math.min(100,Math.round(t/g*100)):0;
+          const p=g?Math.round(t/g*100):0;
           const proj=LAST_D>0&&g?Math.round(t/LAST_D*DAYS):'-';
           const c=g?(p>=100?'#1D9E75':p>=80?'#BA7517':'#D85A30'):'var(--text-secondary)';
           const pc=LAST_D>0&&g?(proj>=g?'#1D9E75':proj>=g*0.8?'#BA7517':'#D85A30'):'var(--text-secondary)';
-          const bar=g?`<div class="progress-bar" style="height:4px;margin:3px 0"><div class="progress-fill" style="width:${p}%;background:${c}"></div></div>`:'';
+          const bar=g?`<div class="progress-bar" style="height:4px;margin:3px 0"><div class="progress-fill" style="width:${Math.min(100,p)}%;background:${c}"></div></div>`:'';
           return `<td style="text-align:center;min-width:80px">
             <span style="font-size:12px;font-weight:700;color:${c}">${g?p+'%':'未設定'}</span>
             ${bar}
@@ -2946,7 +3053,7 @@ function teamRank(staffVals,maxVal){
 function teamTable(){
   return `<div class="kpi-table-wrap"><table class="kpi-table">
     <thead><tr><th class="row-header">担当者</th>${KPI_ACT.map(k=>`<th>${k}</th>`).join('')}</tr></thead>
-    <tbody>${STAFF_LIST.map((s,i)=>`<tr><td class="row-header">${s}</td>
+    <tbody>${STAFF_LIST.map((s,i)=>i).filter(isStaffActive).map(i=>`<tr><td class="row-header">${STAFF_LIST[i]}</td>
       ${KPI_ACT.map(k=>{const v=sumKpi(i,k);const g=gData()[i][k]||1;const p=v/g;
         return `<td style="color:${p>=1?'#1D9E75':p>=.7?'#BA7517':'#D85A30'}">${v}</td>`;}).join('')}
     </tr>`).join('')}</tbody>
@@ -3107,8 +3214,8 @@ function timelinePage(){
   function rowD(who,k){
     let act,goal;
     if(who==='total'){
-      act=sumKpiAll(k);
-      goal=STAFF_LIST.reduce((_,__,i)=>_+(gData()[i]&&gData()[i][k]||0),0);
+      act=sumKpiAllActive(k);
+      goal=goalSumActive(k);
     }else{
       act=sumKpi(who,k);
       goal=(gData()[who]&&gData()[who][k])||0;
@@ -3183,8 +3290,8 @@ function timelinePage(){
 
   let rows;
   if(tlView==='staff'){
-    // 全スタッフ行 + チーム合計行
-    rows=STAFF_LIST.map((s,i)=>barRow(s,rowD(i,kpi),false)).join('');
+    // 全スタッフ行 + チーム合計行（無効化スタッフは除く）
+    rows=STAFF_LIST.map((s,i)=>i).filter(isStaffActive).map(i=>barRow(STAFF_LIST[i],rowD(i,kpi),false)).join('');
     rows+=barRow('チーム合計',rowD('total',kpi),true);
   }else{
     // 特定スタッフの全KPI
@@ -3212,19 +3319,21 @@ function summaryPage(){
   // ===== Total 表示（管理者のみ） =====
   if(isTotal){
     const actCols=['コール数','アプローチ数','完了数','クロージング数','依頼数','後確数','契約数','解約数'];
-    const _callBar=(pct)=>{const col=pct>=100?'#1D9E75':pct>=70?'#BA7517':'#D85A30';return `<td style="min-width:100px"><div style="display:flex;align-items:center;gap:5px"><div class="progress-bar" style="flex:1;height:5px"><div class="progress-fill" style="width:${pct}%;background:${col}"></div></div><span style="font-size:11px;color:${col};font-weight:600;white-space:nowrap">${pct}%</span></div></td>`;};
-    const actRows=STAFF_LIST.map((s,i)=>{
+    const _callBar=(pct)=>{const col=pct>=100?'#1D9E75':pct>=70?'#BA7517':'#D85A30';return `<td style="min-width:100px"><div style="display:flex;align-items:center;gap:5px"><div class="progress-bar" style="flex:1;height:5px"><div class="progress-fill" style="width:${Math.min(100,pct)}%;background:${col}"></div></div><span style="font-size:11px;color:${col};font-weight:600;white-space:nowrap">${pct}%</span></div></td>`;};
+    const actRows=STAFF_LIST.map((s,i)=>i).filter(isStaffActive).map(i=>{
+      const s=STAFF_LIST[i];
       const callVal=sumKpi(i,'コール数');
       const callGoal=(gData()[i]&&gData()[i]['コール数'])||1;
-      const callPct=Math.min(100,Math.round(callVal/callGoal*100));
+      const callPct=Math.round(callVal/callGoal*100);
       return `<tr><td class="row-header">${esc(s)}</td>${actCols.map(k=>`<td>${sumKpi(i,k)}</td>`).join('')}${_callBar(callPct)}</tr>`;
     }).join('');
-    const totCallVal=sumKpiAll('コール数');
-    const totCallGoal=STAFF_LIST.reduce((a,_,i)=>a+((gData()[i]&&gData()[i]['コール数'])||0),0)||1;
-    const totCallPct=Math.min(100,Math.round(totCallVal/totCallGoal*100));
-    const actTotRow=`<tr style="background:#E6F1FB;font-weight:700"><td class="row-header" style="color:#185FA5">Total</td>${actCols.map(k=>`<td style="color:#185FA5">${sumKpiAll(k)}</td>`).join('')}${_callBar(totCallPct)}</tr>`;
+    const totCallVal=sumKpiAllActive('コール数');
+    const totCallGoal=goalSumActive('コール数')||1;
+    const totCallPct=Math.round(totCallVal/totCallGoal*100);
+    const actTotRow=`<tr style="background:#E6F1FB;font-weight:700"><td class="row-header" style="color:#185FA5">Total</td>${actCols.map(k=>`<td style="color:#185FA5">${sumKpiAllActive(k)}</td>`).join('')}${_callBar(totCallPct)}</tr>`;
 
-    const ccRows=STAFF_LIST.map((s,i)=>{
+    const ccRows=STAFF_LIST.map((s,i)=>i).filter(isStaffActive).map(i=>{
+      const s=STAFF_LIST[i];
       const cm=ccMonthly(i);
       return `<tr>
         <td class="row-header">${esc(s)}</td>
@@ -3235,10 +3344,10 @@ function summaryPage(){
         <td style="color:${cm.abnRate<=5?'#1D9E75':cm.abnRate<=15?'#BA7517':'#D85A30'}">${cm.abnRate.toFixed(1)}%</td>
       </tr>`;
     }).join('');
-    const totInb=STAFF_LIST.reduce((_,__,i)=>_+sumKpi(i,'着信数'),0);
-    const totAns=STAFF_LIST.reduce((_,__,i)=>_+sumKpi(i,'応答数'),0);
-    const totSl=STAFF_LIST.reduce((_,__,i)=>_+sumKpi(i,'20秒内応答数'),0);
-    const totTalk=STAFF_LIST.reduce((_,__,i)=>_+sumKpi(i,'通話時間(分)'),0);
+    const totInb=sumKpiAllActive('着信数');
+    const totAns=sumKpiAllActive('応答数');
+    const totSl=sumKpiAllActive('20秒内応答数');
+    const totTalk=sumKpiAllActive('通話時間(分)');
     const tAnsRate=totInb?Math.min(100,totAns/totInb*100):0;
     const tAbnRate=totInb?Math.min(100,Math.max(0,totInb-totAns)/totInb*100):0;
     const tAht=totAns?totTalk/totAns:0;
@@ -3285,6 +3394,7 @@ function summaryPage(){
   const iqRate=mRate('依頼数','クロージング数');
   const contractRate=mRate('契約数','後確数');
   const cancelRate=(()=>{const c=sumKpi(si,'契約数');return c?Math.min(100,sumKpi(si,'解約数')/c*100):0;})();
+  const contactDoneRate=mRate('完了数','コンタクト数');
 
   const actTable=KPI_ACT.map(k=>{
     const cur=sumKpi(si,k);
@@ -3302,6 +3412,7 @@ function summaryPage(){
   }).join('');
 
   const rateCards=[
+    {label:'対コンタクト完了率',val:contactDoneRate,sub:'完了÷コンタクト',inv:false},
     {label:'クロージング率',val:closingRate,sub:'クロ÷完了',inv:false},
     {label:'依頼率',val:iqRate,sub:'依頼÷クロ',inv:false},
     {label:'契約率',val:contractRate,sub:'契約÷後確',inv:false},
@@ -3381,10 +3492,10 @@ function bindSummary(){
 // 管理者向け対応タスク一覧を生成（件数が0になると自動的にパネルが消える）
 function adminTaskAlerts(){
   const tasks=[];
-  const otP=(state.otRequests||[]).filter(r=>r.status==='pending').length;
-  const lvP=(state.leaveRequests||[]).filter(r=>r.status==='pending').length;
-  const chgP=(state.shiftChangeReqs||[]).filter(r=>r.status==='pending').length;
-  const pwU=STAFF_LIST.filter((_,si)=>mustChangePw(si)).length;
+  const otP=(state.otRequests||[]).filter(r=>r.status==='pending'&&isStaffActive(r.si)).length;
+  const lvP=(state.leaveRequests||[]).filter(r=>r.status==='pending'&&isStaffActive(r.si)).length;
+  const chgP=(state.shiftChangeReqs||[]).filter(r=>r.status==='pending'&&isStaffActive(r.si)).length;
+  const pwU=STAFF_LIST.filter((_,si)=>isStaffActive(si)&&mustChangePw(si)).length;
   if(otP)tasks.push({lv:'danger',icon:'ti-clock-check',msg:`残業申請の承認待ちが <b>${otP}件</b> あります`,tab:'ot'});
   if(lvP)tasks.push({lv:'danger',icon:'ti-calendar-heart',msg:`有給申請の承認待ちが <b>${lvP}件</b> あります`,tab:'leave'});
   if(chgP)tasks.push({lv:'warn',icon:'ti-calendar-edit',msg:`シフト修正依頼の承認待ちが <b>${chgP}件</b> あります`,tab:'shift'});
@@ -3431,12 +3542,13 @@ function adminPage(){
     <div class="tab ${state.adminTab==='correction'?'active':''}" data-atab="correction"><i class="ti ti-edit"></i> 打刻修正</div>
     <div class="tab ${state.adminTab==='leave'?'active':''}" data-atab="leave"><i class="ti ti-calendar"></i> 有給・欠勤</div>
     <div class="tab ${state.adminTab==='goals'?'active':''}" data-atab="goals"><i class="ti ti-target"></i> 目標設定</div>
+    <div class="tab ${state.adminTab==='threshold'?'active':''}" data-atab="threshold"><i class="ti ti-alert-triangle"></i> 赤色判定基準</div>
     <div class="tab ${state.adminTab==='ot'?'active':''}" data-atab="ot"><i class="ti ti-clock-check"></i> 残業承認</div>
     <div class="tab ${state.adminTab==='shift'?'active':''}" data-atab="shift"><i class="ti ti-calendar-week"></i> シフト</div>
     <div class="tab ${state.adminTab==='pay'?'active':''}" data-atab="pay"><i class="ti ti-cash"></i> 給与</div>
     <div class="tab ${state.adminTab==='staff'?'active':''}" data-atab="staff"><i class="ti ti-users-group"></i> スタッフ管理</div>
   </div>
-  ${state.adminTab==='proxy'?adminProxy():state.adminTab==='correction'?adminCorrection():state.adminTab==='leave'?adminLeave():state.adminTab==='ot'?adminOt():state.adminTab==='shift'?adminShift():state.adminTab==='pay'?adminPayroll():state.adminTab==='staff'?adminStaff():adminGoals()}`;
+  ${state.adminTab==='proxy'?adminProxy():state.adminTab==='correction'?adminCorrection():state.adminTab==='leave'?adminLeave():state.adminTab==='ot'?adminOt():state.adminTab==='shift'?adminShift():state.adminTab==='pay'?adminPayroll():state.adminTab==='staff'?adminStaff():state.adminTab==='threshold'?adminThreshold():adminGoals()}`;
 }
 function adminProxy(){
   const si=state.proxyStaff;
@@ -3453,7 +3565,7 @@ function adminProxy(){
   <div class="card">
     <div class="section-title">操作対象のスタッフを選択</div>
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
-      <select class="select" id="proxy-staff">${STAFF_LIST.map((s,i)=>`<option value="${i}" ${i===si?'selected':''}>${s}</option>`).join('')}</select>
+      <select class="select" id="proxy-staff">${STAFF_LIST.map((s,i)=>{if(!isStaffActive(i))return '';return `<option value="${i}" ${i===si?'selected':''}>${s}</option>`;}).join('')}</select>
       <span class="status-dot ${status}"></span><span style="font-weight:600;color:${colMap[status]}">${labels[status]}</span>
     </div>
     <div class="attendance-btns" style="max-width:480px">
@@ -3560,20 +3672,22 @@ function bindLeaveAck(){
 function adminStaff(){
   return `<div class="card">
     <div class="section-title">スタッフ管理・パスワード <span class="admin-tag">管理者専用</span></div>
-    <div class="tip" style="margin-bottom:14px;line-height:1.7">スタッフの<b>追加・名前変更・削除</b>と<b>パスワードの確認・変更</b>ができます。<br><i class="ti ti-alert-triangle" style="color:#A32D2D"></i> 削除すると、そのスタッフの<b>全期間データも削除</b>されます（元に戻せません）。パスワード欄を書き換えると<b>リセット</b>され、次回ログイン時に本人へ変更を要求します。</div>
-    <div class="kpi-table-wrap"><table class="att-list" style="min-width:560px">
-      <thead><tr><th style="width:40px">No.</th><th>氏名</th><th>パスワード（確認・変更）</th><th style="width:84px">最終変更</th><th style="width:150px">操作</th></tr></thead>
+    <div class="tip" style="margin-bottom:14px;line-height:1.7">スタッフの<b>追加・名前変更</b>と<b>パスワードの確認・変更</b>ができます。<br><i class="ti ti-user-off" style="color:#854F0B"></i> <b>無効化</b>：データは保持したまま、ログイン・現在のチーム表示（チームダッシュボード・アラート・本日の出勤状況等）からのみ除外します。いつでも有効化に戻せます。<br><i class="ti ti-alert-triangle" style="color:#A32D2D"></i> <b>完全削除</b>：そのスタッフの<b>全期間データも削除</b>されます（元に戻せません）。パスワード欄を書き換えると<b>リセット</b>され、次回ログイン時に本人へ変更を要求します。</div>
+    <div class="kpi-table-wrap"><table class="att-list" style="min-width:620px">
+      <thead><tr><th style="width:40px">No.</th><th>氏名</th><th>パスワード（確認・変更）</th><th style="width:84px">最終変更</th><th style="width:56px">状態</th><th style="width:190px">操作</th></tr></thead>
       <tbody>
-        ${STAFF_LIST.map((s,i)=>{const a=state.staffPw[i]||{pw:'',changedYM:null};return `<tr>
+        ${STAFF_LIST.map((s,i)=>{const a=state.staffPw[i]||{pw:'',changedYM:null};const active=isStaffActive(i);return `<tr style="${active?'':'opacity:.6'}">
           <td style="font-family:var(--font-mono);color:var(--text-secondary)">${i+1}</td>
           <td><input class="form-control" style="min-width:110px" value="${esc(s)}" data-staff-name="${i}"></td>
           <td><input class="form-control" style="min-width:130px;font-family:var(--font-mono)" value="${esc(a.pw)}" data-staff-pw="${i}"></td>
           <td style="font-size:12px;${a.changedYM?'':'color:#A32D2D;font-weight:600'}">${fmtChangedYM(a.changedYM)}</td>
+          <td>${active?'<span class="badge badge-staff">有効</span>':'<span class="badge" style="background:var(--bg-danger);color:var(--text-danger)">無効</span>'}</td>
           <td style="white-space:nowrap">
             <button class="btn btn-sm" data-staff-force="${i}" title="次回ログイン時に変更を要求"><i class="ti ti-key"></i></button>
-            <button class="btn btn-sm" data-staff-del="${i}" style="color:#A32D2D" title="削除" ${STAFF_LIST.length<=1?'disabled':''}><i class="ti ti-trash"></i></button>
+            <button class="btn btn-sm" data-staff-toggle="${i}" style="color:${active?'#854F0B':'#1D9E75'}" title="${active?'無効化（データは保持・ログイン不可に）':'有効化（再びログイン可能に）'}"><i class="ti ${active?'ti-user-off':'ti-user-check'}"></i></button>
+            <button class="btn btn-sm" data-staff-del="${i}" style="color:#A32D2D" title="完全削除（データも削除・元に戻せません）" ${STAFF_LIST.length<=1?'disabled':''}><i class="ti ti-trash"></i></button>
             <span id="staff-confirm-${i}" style="display:none;align-items:center;gap:6px">
-              <span style="font-size:12px;color:#993C1D;font-weight:500">削除？</span>
+              <span style="font-size:12px;color:#993C1D;font-weight:500">完全削除？データも消えます</span>
               <button class="btn btn-sm" data-staff-del-yes="${i}" style="background:#D85A30;color:#fff;border-color:#D85A30">はい</button>
               <button class="btn btn-sm" data-staff-del-no="${i}">中止</button>
             </span>
@@ -3709,6 +3823,38 @@ function adminShift(){
     </table></div>
   </div>`;
 }
+function adminThreshold(){
+  const th=kpiThresholds();
+  const fields=[
+    {k:'callPerHour',label:'コール数：稼働1時間あたりの最低件数',unit:'件/時間',sub:'例）8時間稼働で240件未満なら赤'},
+    {k:'approachPerHour',label:'アプローチ数：稼働1時間あたりの最低件数',unit:'件/時間'},
+    {k:'callContactRate',label:'対コールコンタクト数：コール数に対する最低割合',unit:'%'},
+    {k:'approachContactRate',label:'対アプローチコンタクト数：アプローチ数に対する最低割合',unit:'%'},
+    {k:'contactDoneRate',label:'完了数：コンタクト数に対する最低割合',unit:'%'},
+    {k:'closingRate',label:'クロージング数：完了数に対する最低割合',unit:'%'},
+    {k:'reqHoursPer',label:'依頼数：何時間で1件のペースが必要か',unit:'時間で1件',sub:'例）4時間で1件 → 8時間稼働なら2件未満で赤'},
+    {k:'confirmRate',label:'後確数：依頼数に対する最低割合',unit:'%'},
+    {k:'contractRate',label:'契約数：後確数に対する最低割合',unit:'%'},
+    {k:'cancelMaxPerDay',label:'解約数：1日あたりこの件数以上で赤',unit:'件以上/日'},
+  ];
+  return `<div class="card">
+    <div class="section-title">KPI入力の赤色判定基準 <span class="admin-tag">管理者専用</span></div>
+    <div class="tip" style="margin-bottom:14px;line-height:1.7">KPI入力ページで、各項目が基準を下回った日の数値を<span style="color:#D85A30;font-weight:700">赤色</span>で表示します（基準を満たす場合は通常の黒色）。稼働時間が必要な項目（コール数・アプローチ数・依頼数）は、その日に打刻が無い場合は判定しません。</div>
+    <table class="att-list"><thead><tr><th style="min-width:280px">項目</th><th style="width:140px">基準値</th></tr></thead>
+    <tbody>${fields.map(f=>`<tr>
+      <td>${f.label}${f.sub?`<div class="tip" style="font-size:11px;margin-top:2px">${f.sub}</div>`:''}</td>
+      <td><div style="display:flex;align-items:center;gap:6px">
+        <input type="number" class="form-control" style="width:80px" value="${th[f.k]}" data-thkey="${f.k}">
+        <span class="tip" style="white-space:nowrap">${f.unit}</span>
+      </div></td>
+    </tr>`).join('')}
+    </tbody></table>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn btn-primary" id="threshold-save"><i class="ti ti-device-floppy"></i> 保存する</button>
+      <button class="btn" id="threshold-reset"><i class="ti ti-refresh"></i> デフォルトに戻す</button>
+    </div>
+  </div>`;
+}
 function adminGoals(){
   let si=state.goalStaff; // 専用stateを使用。-1=全体枠、0以上=個人
   if(typeof si!=='number'||(si!==-1&&(si<0||si>=STAFF_LIST.length)))si=0;
@@ -3717,14 +3863,15 @@ function adminGoals(){
   const optStaff=STAFF_LIST.map((s,i)=>`<option value="${i}" ${i===si?'selected':''}>${s}</option>`).join('');
   return `<div class="card"><div class="section-title">月次目標設定 <span class="admin-tag">管理者専用</span></div>
     <div style="margin-bottom:14px"><select class="select" id="goal-staff">${optStaff}${optTeam}</select></div>
-    ${isTotal?`<p class="tip" style="margin-bottom:8px"><i class="ti ti-info-circle"></i> 全スタッフの個人目標合計と、チーム全体の実績を表示します（目標は各個人目標の合算）。</p>`:''}
+    ${isTotal?`<p class="tip" style="margin-bottom:8px"><i class="ti ti-info-circle"></i> 有効なスタッフの個人目標合計と、チーム全体の実績を表示します（無効化したスタッフは目標合計・実績ともに除きます）。</p>`:''}
     <table class="att-list"><thead><tr><th>KPI項目</th><th>${isTotal?'個人目標合計':'月次目標値'}</th><th>現在の達成率</th></tr></thead>
     <tbody>${KPI_ACT.map(k=>{
-      const tot=isTotal?sumKpiAll(k):sumKpi(si,k);
-      const goal=isTotal?STAFF_LIST.reduce((_,__,i)=>_+(gData()[i]?.[k]||0),0)||1:(gData()[si]?.[k]||1);
+      const tot=isTotal?sumKpiAllActive(k):sumKpi(si,k);
+      const goal=isTotal?(goalSumActive(k)||1):(gData()[si]?.[k]||1);
       const pct=Math.round(tot/goal*100);const col=pct>=100?'#1D9E75':pct>=70?'#BA7517':'#D85A30';
+      const isComputed=COMPUTED_KPI.includes(k);
       return `<tr><td>${k}</td>
-        <td>${isTotal?`<span style="font-family:var(--font-mono);font-weight:600">${goal.toLocaleString()}</span>`:
+        <td>${(isTotal||isComputed)?`<span style="font-family:var(--font-mono);font-weight:600${isComputed?';color:#7C3AED':''}" ${isComputed?'title="対コールコンタクト数＋対アプローチコンタクト数の自動合算（手入力不可）"':''}>${goal.toLocaleString()}</span>`:
           `<input type="number" class="form-control" style="width:100px" value="${goal}" data-gkpi="${k}" data-gsi="${si}">`}</td>
         <td style="color:${col};font-weight:600">${pct}%（${tot}件）</td></tr>`;}).join('')}
     </tbody></table>
@@ -3814,7 +3961,15 @@ function bindAdmin(){
     render();
   };
   const goalStaff=document.getElementById('goal-staff');if(goalStaff)goalStaff.onchange=e=>{state.goalStaff=parseInt(e.target.value);render();};
-  document.querySelectorAll('[data-gkpi]').forEach(inp=>{inp.oninput=e=>{const si=parseInt(e.target.dataset.gsi);if(!gData()[si])gData()[si]={};gData()[si][e.target.dataset.gkpi]=parseInt(e.target.value)||0;saveStateDebounced();};});
+  document.querySelectorAll('[data-gkpi]').forEach(inp=>{inp.oninput=e=>{const si=parseInt(e.target.dataset.gsi);if(!gData()[si])gData()[si]={};gData()[si][e.target.dataset.gkpi]=parseInt(e.target.value)||0;syncContactGoal(si);saveStateDebounced();};});
+  // --- KPI赤色判定基準値 ---
+  document.querySelectorAll('[data-thkey]').forEach(inp=>{
+    inp.oninput=e=>{state.kpiThresholds=state.kpiThresholds||{};state.kpiThresholds[e.target.dataset.thkey]=parseFloat(e.target.value)||0;saveStateDebounced();};
+  });
+  const thSave=document.getElementById('threshold-save');
+  if(thSave)thSave.onclick=()=>{saveState();toast('赤色判定基準を保存しました','success');};
+  const thReset=document.getElementById('threshold-reset');
+  if(thReset)thReset.onclick=()=>{state.kpiThresholds={};toast('デフォルト値に戻しました','info');render();};
   const goalSave=document.getElementById('goal-save');if(goalSave)goalSave.onclick=()=>toast('目標を保存しました','success');
   // --- スタッフ管理 ---
   document.querySelectorAll('[data-staff-name]').forEach(inp=>{
@@ -3829,6 +3984,9 @@ function bindAdmin(){
   });
   document.querySelectorAll('[data-staff-del-yes]').forEach(btn=>{
     btn.onclick=()=>{removeStaff(parseInt(btn.dataset.staffDelYes));render();};
+  });
+  document.querySelectorAll('[data-staff-toggle]').forEach(btn=>{
+    btn.onclick=()=>{const i=parseInt(btn.dataset.staffToggle);const wasActive=isStaffActive(i);toggleStaffActive(i);toast(STAFF_LIST[i]+(wasActive?' を無効化しました（データは保持されます）':' を有効化しました'),'info');render();};
   });
   const addStaffBtn=document.getElementById('add-staff-btn');
   if(addStaffBtn)addStaffBtn.onclick=()=>{addStaff(document.getElementById('new-staff-name').value);render();};

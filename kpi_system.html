@@ -204,7 +204,7 @@ let STAFF_LIST=['田中 一郎','佐藤 花子','鈴木 太郎','高橋 美咲',
 const KPI_ACT=['コール数','アプローチ数','コンタクト数','対コールコンタクト数','対アプローチコンタクト数','完了数','クロージング数','依頼数','後確数','契約数','解約数'];
 const KPI_RATE=['対コールコンタクト率','対アプローチコンタクト率','対コール完了率','対アプローチ完了率','対コンタクト完了率','クロージング率','依頼率','後確率','契約率','解約率'];
 const KPI_CC=['着信数','応答数','通話時間(分)','20秒内応答数']; // コールセンター指標の入力値（応答率/放棄率/AHT/SLは自動計算）
-const CRM_LINKED_KPI=['依頼数','後確数','契約数','解約数']; // customer_crm.htmlの対応ステータス変更で自動加算される指標（手入力不可）
+const CRM_LINKED_KPI=['依頼数','後確数','契約数','解約数']; // customer_crm.htmlの対応ステータス変更で自動加算される指標。手入力も可能で、CRM側の加算は手入力値に+1で上乗せされる
 const COMPUTED_KPI=['コンタクト数']; // 対コールコンタクト数＋対アプローチコンタクト数から自動計算される指標（手入力不可）
 // KPI閾値判定（入力値が基準未満の日は赤色表記）のデフォルト値。管理者画面で変更可能（state.kpiThresholdsに保存）
 const DEFAULT_KPI_THRESHOLDS={
@@ -1995,7 +1995,7 @@ function kpiPage(){
     <button class="btn btn-sm" id="kpi-csv" style="margin-left:auto"><i class="ti ti-file-download"></i> CSV出力</button>
     <span class="tip">${isTotal?'<i class="ti ti-users" style="color:#185FA5"></i> 全員合計':'<i class="ti ti-check" style="color:#1D9E75"></i> 自動保存済み'}</span>
   </div>
-  ${state.kpiTab==='act'?`<div class="tip" style="margin:-6px 0 12px;color:#7C3AED"><i class="ti ti-link"></i> 依頼数・後確数・契約数・解約数はCRM（顧客管理）の対応履歴ステータスから自動集計されます（手入力不可）</div>`:''}`;
+  ${state.kpiTab==='act'?`<div class="tip" style="margin:-6px 0 12px;color:#7C3AED"><i class="ti ti-link"></i> 依頼数・後確数・契約数・解約数は手動入力できます。CRM（顧客管理）の対応履歴ステータス変更時は入力値に+1で自動加算されます</div>`:''}`;
 
   const RATE_MAP={
     '対コールコンタクト率':['対コールコンタクト数','コール数'],
@@ -2130,8 +2130,7 @@ function kpiPage(){
             const below=isKpiBelowThreshold(si,day,k);
             const warnCol=below?'#D85A30':'';
             if(COMPUTED_KPI.includes(k)){return `<td class="${day===TODAY_D?'today ':''} linked" style="${warnCol?'color:'+warnCol:''}" title="対コールコンタクト数＋対アプローチコンタクト数の自動合算（手入力不可）">${kData()[si][day][k]||0}</td>`;}
-            if(CRM_LINKED_KPI.includes(k)){return `<td class="${day===TODAY_D?'today ':''} linked" style="${warnCol?'color:'+warnCol:''}" title="CRMの対応履歴から自動集計（手入力不可）">${kData()[si][day][k]||0}</td>`;}
-            return `<td class="${day===TODAY_D?'today':''}"><input type="number" min="0" value="${kData()[si][day][k]||0}" data-si="${si}" data-day="${day}" data-kpi="${k}" style="${warnCol?'color:'+warnCol+';font-weight:700':''}"></td>`;
+            return `<td class="${day===TODAY_D?'today':''}"><input type="number" min="0" value="${kData()[si][day][k]||0}" data-si="${si}" data-day="${day}" data-kpi="${k}" style="${warnCol?'color:'+warnCol+';font-weight:700':''}" ${CRM_LINKED_KPI.includes(k)?'title="CRMの対応履歴ステータス変更でも+1で自動加算されます"':''}></td>`;
           }).join('')}
           <td class="total ${isRate?'rate':''}">${isRate?'—':sumKpi(si,k)}</td>
         </tr>`;
@@ -2761,15 +2760,15 @@ function dashboardPage(){
           const p=Math.round(monthTot/g*100);
           const c=p>=100?'#1D9E75':p>=70?'#BA7517':'#D85A30';
           const linked=CRM_LINKED_KPI.includes(k),computed=COMPUTED_KPI.includes(k);
-          const readOnly=linked||computed;
+          const readOnly=computed;
           const below=isKpiBelowThreshold(si,TODAY_D,k);
           const warnCol=below?'#D85A30':'';
           return `<tr>
             <td class="row-header">${k}</td>
-            <td style="${readOnly?'color:'+(warnCol||'#7C3AED')+';font-weight:600':'background:#EEF5FF'}" ${readOnly?`title="${linked?'CRMの対応履歴から自動集計':'対コールコンタクト数＋対アプローチコンタクト数の自動合算'}（手入力不可）"`:''} id="${readOnly?'rt-val-'+kpiDomId(k):''}">
+            <td style="${readOnly?'color:'+(warnCol||'#7C3AED')+';font-weight:600':'background:#EEF5FF'}" ${readOnly?`title="対コールコンタクト数＋対アプローチコンタクト数の自動合算（手入力不可）"`:''} id="${readOnly?'rt-val-'+kpiDomId(k):''}">
               ${readOnly?todayVal:`<input type="number" min="0" value="${todayVal}"
                 style="width:70px;padding:4px 6px;border:1px solid var(--border-md);border-radius:5px;font-size:13px;text-align:right;font-family:inherit;${warnCol?'color:'+warnCol+';font-weight:700':''}"
-                data-rt-si="${si}" data-rt-kpi="${k}">`}
+                data-rt-si="${si}" data-rt-kpi="${k}" ${linked?'title="CRMの対応履歴ステータス変更でも+1で自動加算されます"':''}>`}
             </td>
             <td style="text-align:right;font-weight:600;font-family:var(--font-mono)" id="rt-month-${kpiDomId(k)}">${monthTot}</td>
             <td style="text-align:right;font-weight:600;color:${c}" id="rt-pct-${kpiDomId(k)}">${p}%</td>
